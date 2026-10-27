@@ -28,6 +28,7 @@ import {
   Redo2,
   Rows3,
   Save,
+  Search,
   Sigma,
   Sun,
   Undo2,
@@ -45,6 +46,7 @@ import {
 } from './store/workbook'
 import { statsWorker } from './workers/client'
 import { loadAutosave, saveAutosave } from './utils/projects'
+import { filterRowIndexes } from './utils/filterRows'
 import type { DescriptiveSummary } from './stats/descriptive'
 
 const menuKeys = [
@@ -203,6 +205,7 @@ function App() {
   const undo = useWorkbookStore((state) => state.undo)
   const redo = useWorkbookStore((state) => state.redo)
   const [targetColumn, setTargetColumn] = useState('C4')
+  const [filterQuery, setFilterQuery] = useState('')
   const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending')
   const [session, setSession] = useState<SessionResult | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
@@ -215,9 +218,10 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const visibleRowIndexes = useMemo(() => filterRowIndexes(rows, filterQuery), [filterQuery, rows])
 
   const virtualizer = useVirtualizer({
-    count: rows.length,
+    count: visibleRowIndexes.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 36,
     overscan: 10,
@@ -582,6 +586,16 @@ function App() {
           <Download size={15} />
           {t('export')}
         </button>
+        <label className="toolbar-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={filterQuery}
+            onChange={(event) => setFilterQuery(event.target.value)}
+            placeholder={t('searchRows')}
+            aria-label={t('searchRows')}
+          />
+        </label>
         <button className="toolbar-button" type="button" onClick={() => insertRow(activeCell.row)}>
           <Rows3 size={15} />
           {t('addRow')}
@@ -777,13 +791,20 @@ function App() {
                 </tr>
               </thead>
               <tbody>
+                {visibleRowIndexes.length === 0 && (
+                  <tr>
+                    <td className="empty-filter" colSpan={columns.length + 1}>
+                      {t('noMatchingRows')}
+                    </td>
+                  </tr>
+                )}
                 {topPadding > 0 && (
                   <tr aria-hidden="true">
                     <td colSpan={columns.length + 1} style={{ height: topPadding }} />
                   </tr>
                 )}
                 {virtualRows.map((virtualRow) => {
-                  const rowIndex = virtualRow.index
+                  const rowIndex = visibleRowIndexes[virtualRow.index]
                   const row = rows[rowIndex]
                   return (
                     <tr key={rowIndex}>
@@ -814,7 +835,10 @@ function App() {
           </div>
           <div className="sheet-footer">
             <span>
-              {rows.length} {t('rows')}
+              {visibleRowIndexes.length === rows.length
+                ? rows.length
+                : `${visibleRowIndexes.length} / ${rows.length}`}{' '}
+              {t('rows')}
             </span>
             <span>
               {columns.length} {t('columns')}

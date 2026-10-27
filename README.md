@@ -25,6 +25,7 @@ npm run build
 
 - Virtualized editable worksheet with an example production dataset, numeric/text columns, row and column insertion, ascending sort, keyboard undo/redo, and tab/newline paste.
 - Data menu: ascending/descending typed sort, insert/delete active row, delete active column (last-column guard), and replace missing values. These operations are undoable.
+- Swedish-aware, case-insensitive quick search filters visible rows without changing the underlying worksheet; the virtualized grid retains original row indexes.
 - Calculate menu: worker-backed sample z-score standardization, stored in a new undoable numeric column; missing observations remain missing.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
@@ -39,7 +40,7 @@ npm run build
 | Sample z-score standardization                                    | Implemented; not independently reference-verified | `src/stats/__tests__/transform.test.ts`; hand-calculated fixture `[1, 2, 3] -> [-1, 0, 1]`; an external reference comparison remains                                                 |
 | Other requested statistical analyses                              | Not started                                       | No implementation or reference fixture yet                                                                                                                                           |
 
-The nineteen current tests cover descriptive summaries, standardization, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
+The twenty-three current tests cover descriptive summaries, standardization, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 ## Architecture
 

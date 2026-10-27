@@ -16,7 +16,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 ## Fas 1: Data, beräkning och beskrivande statistik
 
 - [ ] Data: sortera, stapla/avstapla, dela datablad, sammanfoga, subset, kodning numerisk/text/datum/tid, omvandla typ, rangordna, ta bort/ersätta saknade värden, slumpmässigt urval. Status: ej påbörjad.
-- [x] Data-delmodul: stigande/fallande typed sortering med saknade värden sist, infoga/ta bort aktiv rad, ta bort aktiv kolumn med skydd för sista kolumnen, ersätt saknade värden. Status: klar och verifierad med store-tester; sortering manuellt kontrollerad i webbläsaren. Stapla/dela/sammanfoga/subset/filter/konvertering/rangordning/slumpurval återstår.
+- [x] Data-delmodul: stigande/fallande typed sortering med saknade värden sist, infoga/ta bort aktiv rad, ta bort aktiv kolumn med skydd för sista kolumnen, ersätt saknade värden samt icke-destruktivt textsökfilter över synliga rader. Status: klar och verifierad med tester och browserflöde. Avancerade filtervillkor, stapla/dela/sammanfoga/subset/konvertering/rangordning/slumpurval återstår.
 - [ ] Beräkna: kalkylator med matematiska/statistiska/logiska funktioner radvis och kolumnvis; beskrivande kolumnstatistik; standardisering; slumpdata från normal, uniform, binomial, Poisson, exponential, gamma, beta, t, chi-två, F, Weibull, lognormal och andra vanliga fördelningar; pdf, cdf och invers cdf. Status: ej påbörjad.
 - [x] Beräkna-delmodul: sample z-score-standardisering via worker, lagras som ny undo-bar numerisk kolumn; saknade värden bevaras och konstant/för liten/tom kolumn ger begripliga fel. Status: klar; 5 tester med handberäknat fixture `[1, 2, 3]`, extern referensverifiering återstår.
 - [ ] Statistik > Grundläggande: grafisk sammanfattning; beskrivande statistik; 1-urvals Z/t; 2-urvals t; parat t; 1/2 proportioner; 1/2-urvals Poisson-hastighet; jämförelse av två varianser, Bartlett, Levene; korrelation; kovarians; Anderson-Darling, Ryan-Joiner och Kolmogorov-Smirnov normalitetstest; Poisson goodness-of-fit. Status: ej påbörjad.
@@ -80,6 +80,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (19 tester) och `npm run build` passerar.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (23 tester) och `npm run build` passerar.
 - Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema och 390 px mobilvy kontrollerade.
 - Nästa steg: fortsätt Fas 1 med filter och typ-/saknadsvärdesåtgärder. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.
