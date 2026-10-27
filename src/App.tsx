@@ -54,12 +54,14 @@ import type { PairedTResult } from './stats/pairedT'
 import type { OneProportionResult } from './stats/oneProportion'
 import type { TwoProportionsResult } from './stats/twoProportions'
 import type { CorrelationResult } from './stats/correlation'
+import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
 import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
 import { PairedTDialog } from './dialogs/PairedTDialog'
 import { OneProportionDialog } from './dialogs/OneProportionDialog'
 import { TwoProportionsDialog } from './dialogs/TwoProportionsDialog'
 import { CorrelationDialog } from './dialogs/CorrelationDialog'
+import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog'
 
 const menuKeys = [
   'file',
@@ -93,6 +95,7 @@ const menuContent: Record<string, string[]> = {
     'oneProportion',
     'twoProportions',
     'correlation',
+    'oneSamplePoissonRate',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -117,6 +120,7 @@ const actionLabelKeys: Record<string, string> = {
   oneProportion: 'oneProportion',
   twoProportions: 'twoProportions',
   correlation: 'correlation',
+  oneSamplePoissonRate: 'oneSamplePoissonRate',
 }
 
 interface SessionResult {
@@ -129,6 +133,7 @@ interface SessionResult {
   oneProportion?: OneProportionResult
   twoProportions?: TwoProportionsResult
   correlation?: CorrelationResult
+  oneSamplePoissonRate?: OneSamplePoissonRateResult
   createdAt: Date
 }
 
@@ -254,6 +259,7 @@ function App() {
   const [oneProportionDialogOpen, setOneProportionDialogOpen] = useState(false)
   const [twoProportionsDialogOpen, setTwoProportionsDialogOpen] = useState(false)
   const [correlationDialogOpen, setCorrelationDialogOpen] = useState(false)
+  const [oneSamplePoissonDialogOpen, setOneSamplePoissonDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -604,6 +610,38 @@ function App() {
     }
   }
 
+  async function runOneSamplePoissonAnalysis(
+    columnId: string,
+    exposurePerObservation: number,
+    hypothesizedRate: number,
+    alpha: number,
+  ) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn med heltalsräkningar.')
+      return
+    }
+    const counts = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.oneSamplePoissonRate(counts, exposurePerObservation, hypothesizedRate, alpha),
+        statsWorker.describe(counts),
+      ])
+      setSession({
+        title: '1-urvals Poisson-hastighet',
+        columnName: column.name,
+        summary,
+        oneSamplePoissonRate: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Poisson-testet kunde inte genomföras.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -643,6 +681,7 @@ function App() {
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
     else if (action === 'twoProportions') setTwoProportionsDialogOpen(true)
     else if (action === 'correlation') setCorrelationDialogOpen(true)
+    else if (action === 'oneSamplePoissonRate') setOneSamplePoissonDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -741,7 +780,9 @@ function App() {
               ? `\nz: ${formatValue(session.twoProportions.statistic)}\nAndelsskillnad: ${formatValue(session.twoProportions.difference)}\np-värde: ${formatPValue(session.twoProportions.pValue, language)}\nKI: [${formatValue(session.twoProportions.confidenceInterval[0])}, ${formatValue(session.twoProportions.confidenceInterval[1])}]`
               : session.correlation
                 ? `\nr: ${formatValue(session.correlation.correlation)}\nKovarians: ${formatValue(session.correlation.covariance)}\nt: ${formatValue(session.correlation.statistic)}\np-värde: ${formatPValue(session.correlation.pValue, language)}\nKI: [${formatValue(session.correlation.confidenceInterval[0])}, ${formatValue(session.correlation.confidenceInterval[1])}]`
-                : ''
+                : session.oneSamplePoissonRate
+                  ? `\nHändelser: ${session.oneSamplePoissonRate.eventCount}\nExponering: ${formatValue(session.oneSamplePoissonRate.totalExposure)}\nHastighet: ${formatValue(session.oneSamplePoissonRate.observedRate)}\nz: ${formatValue(session.oneSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.oneSamplePoissonRate.pValue, language)}\nGarwood-KI: [${formatValue(session.oneSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.oneSamplePoissonRate.confidenceInterval[1])}]`
+                  : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1489,6 +1530,61 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.oneSamplePoissonRate && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Poisson-hastighetsresultat' : 'Poisson rate result'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Tvåsidigt Poisson-hastighetstest'
+                      : 'Two-sided Poisson rate test'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>Observationer</span>
+                      <strong>{session.oneSamplePoissonRate.observationCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Händelser</span>
+                      <strong>{session.oneSamplePoissonRate.eventCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Total exponering</span>
+                      <strong>{formatValue(session.oneSamplePoissonRate.totalExposure)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Observerad hastighet</span>
+                      <strong>{formatValue(session.oneSamplePoissonRate.observedRate)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>z</span>
+                      <strong>{formatValue(session.oneSamplePoissonRate.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.oneSamplePoissonRate.pValue, language)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.oneSamplePoissonRate.alpha)} % Garwood-KI: [
+                    {formatValue(session.oneSamplePoissonRate.confidenceInterval[0])},{' '}
+                    {formatValue(session.oneSamplePoissonRate.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.oneSamplePoissonRate.alpha)} ${session.oneSamplePoissonRate.pValue < session.oneSamplePoissonRate.alpha ? 'förkastas H₀; hastigheten skiljer sig statistiskt signifikant från λ₀.' : 'kan H₀ inte förkastas; ingen statistiskt signifikant skillnad från λ₀ visas.'}`
+                      : `At α = ${formatValue(session.oneSamplePoissonRate.alpha)} ${session.oneSamplePoissonRate.pValue < session.oneSamplePoissonRate.alpha ? 'reject H₀; the rate differs significantly from λ₀.' : 'do not reject H₀; no significant difference from λ₀ is shown.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `Poisson-scoretest med normalapproximation. Förväntade händelser under H₀: ${formatValue(session.oneSamplePoissonRate.expectedEvents)}. Oberoende och konstant hastighet har inte testats.`
+                      : `Poisson score test with normal approximation. Expected events under H₀: ${formatValue(session.oneSamplePoissonRate.expectedEvents)}. Independence and constant-rate assumptions were not tested.`}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -1629,6 +1725,21 @@ function App() {
         onOpenChange={setCorrelationDialogOpen}
         onSubmit={(columnId1, columnId2, alpha) => {
           void runCorrelationAnalysis(columnId1, columnId2, alpha)
+        }}
+      />
+      <OneSamplePoissonRateDialog
+        open={oneSamplePoissonDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setOneSamplePoissonDialogOpen}
+        onSubmit={(columnId, exposurePerObservation, hypothesizedRate, alpha) => {
+          void runOneSamplePoissonAnalysis(
+            columnId,
+            exposurePerObservation,
+            hypothesizedRate,
+            alpha,
+          )
         }}
       />
       {toast && (

@@ -26,6 +26,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 - [x] Statistik-delmodul: tvåsidigt 1-proportion Z-test för binär 0/1-kolumn med p₀, normalapproximation, förväntade antal och Wilson-KI. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [x] Statistik-delmodul: tvåsidigt 2-proportion Z-test med pooled null-standardfel, förväntade antal och Newcombe-Wilson-KI för två oberoende binära grupper. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [x] Statistik-delmodul: Pearson-korrelation, sample-kovarians, tvåsidigt t-test och Fisher-z-KI med complete-case-par. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
+- [x] Statistik-delmodul: 1-urvals Poisson-hastighetstest med exponering, score-Z och Garwood-KI. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [ ] Tabeller: korstabell och chi-två; chi-två goodness-of-fit; beskrivande statistik för tabeller; Fisher exakt test. Status: ej påbörjad.
 - [ ] Grafik: histogram (enkelt, anpassad fördelning, flera grupper); boxplot; individuellt värdediagram; punkt-, linje-, stapel- och cirkeldiagram; sannolikhetsdiagram; empirisk CDF; matris- och marginaldiagram; bubbeldiagram; 3D-spridning och yta; kontur-, intervall-, tidsserie- och områdesdiagram; dot plot; violin. Status: ej påbörjad.
 - [x] Delmängd av beskrivande statistik: antal, medelvärde, median, stickprovsstandardavvikelse, varians, standardfel, R-7-kvartiler, variationsbredd, minimum och maximum. Status: klar; handberäknat fixture `[1, 2, 3, 4]` testas med tolerans, men oberoende NIST/R/SciPy-verifiering återstår. Övriga beskrivande mått/analyser återstår.
@@ -86,6 +87,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (46 tester) och `npm run build` passerar.
-- Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema, 390 px mobilvy, sökfilter, t-test, proportionstest och korrelation kontrollerade.
-- Nästa steg: fortsätt Fas 1 med Poisson-hastighet, variansjämförelser och fler grundläggande analyser. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (49 tester) och `npm run build` passerar.
+- Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema, 390 px mobilvy, sökfilter, t-test, proportionstest, korrelation och Poisson-hastighet kontrollerade.
+- Nästa steg: fortsätt Fas 1 med två-urvals Poisson-hastighet, variansjämförelser och fler grundläggande analyser. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.
