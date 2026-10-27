@@ -50,8 +50,10 @@ import { filterRowIndexes } from './utils/filterRows'
 import type { DescriptiveSummary } from './stats/descriptive'
 import type { OneSampleTResult } from './stats/oneSampleT'
 import type { TwoSampleTResult } from './stats/twoSampleT'
+import type { PairedTResult } from './stats/pairedT'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
 import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
+import { PairedTDialog } from './dialogs/PairedTDialog'
 
 const menuKeys = [
   'file',
@@ -81,6 +83,7 @@ const menuContent: Record<string, string[]> = {
   statistics: [
     'oneSampleT',
     'twoSampleT',
+    'pairedT',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -101,6 +104,7 @@ const actionLabelKeys: Record<string, string> = {
   standardizeColumn: 'standardizeColumn',
   oneSampleT: 'oneSampleT',
   twoSampleT: 'twoSampleT',
+  pairedT: 'pairedT',
 }
 
 interface SessionResult {
@@ -109,6 +113,7 @@ interface SessionResult {
   summary: DescriptiveSummary
   oneSampleT?: OneSampleTResult
   twoSampleT?: TwoSampleTResult
+  pairedT?: PairedTResult
   createdAt: Date
 }
 
@@ -230,6 +235,7 @@ function App() {
   const [session, setSession] = useState<SessionResult | null>(null)
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
+  const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -444,6 +450,45 @@ function App() {
     }
   }
 
+  async function runPairedTAnalysis(
+    columnId1: string,
+    columnId2: string,
+    hypothesizedDifference: number,
+    alpha: number,
+  ) {
+    const column1 = columns.find((item) => item.id === columnId1)
+    const column2 = columns.find((item) => item.id === columnId2)
+    if (!column1 || !column2 || column1.type !== 'numeric' || column2.type !== 'numeric') {
+      setToast('Välj två numeriska kolumner för det parade t-testet.')
+      return
+    }
+    const values1 = rows.map((row) => {
+      const raw = row[column1.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const values2 = rows.map((row) => {
+      const raw = row[column2.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.pairedT(values1, values2, hypothesizedDifference, alpha),
+        statsWorker.describe(values1),
+      ])
+      setSession({
+        title: 'Parat t-test',
+        columnName: `${column1.name} − ${column2.name}`,
+        summary,
+        pairedT: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Det parade t-testet kunde inte genomföras.',
+      )
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -479,6 +524,7 @@ function App() {
     else if (action === 'standardizeColumn') void standardizeSelectedColumn()
     else if (action === 'oneSampleT') setOneSampleTDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
+    else if (action === 'pairedT') setPairedTDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -569,7 +615,9 @@ function App() {
       ? `\nt(${session.oneSampleT.degreesOfFreedom}): ${formatValue(session.oneSampleT.statistic)}\ndf: ${session.oneSampleT.degreesOfFreedom}\np-värde: ${formatPValue(session.oneSampleT.pValue, language)}\nKI: [${formatValue(session.oneSampleT.confidenceInterval[0])}, ${formatValue(session.oneSampleT.confidenceInterval[1])}]`
       : session.twoSampleT
         ? `\nt(${formatValue(session.twoSampleT.degreesOfFreedom)}): ${formatValue(session.twoSampleT.statistic)}\nMedelskillnad: ${formatValue(session.twoSampleT.difference)}\np-värde: ${formatPValue(session.twoSampleT.pValue, language)}\nKI: [${formatValue(session.twoSampleT.confidenceInterval[0])}, ${formatValue(session.twoSampleT.confidenceInterval[1])}]`
-        : ''
+        : session.pairedT
+          ? `\nt(${session.pairedT.degreesOfFreedom}): ${formatValue(session.pairedT.statistic)}\nAntal par: ${session.pairedT.pairCount}\nMedelskillnad: ${formatValue(session.pairedT.meanDifference)}\np-värde: ${formatPValue(session.pairedT.pValue, language)}\nKI: [${formatValue(session.pairedT.confidenceInterval[0])}, ${formatValue(session.pairedT.confidenceInterval[1])}]`
+          : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1107,6 +1155,55 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.pairedT && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Parat t-testresultat' : 'Paired t-test result'}
+                >
+                  <h4>{language === 'sv' ? 'Parat tvåsidigt test' : 'Paired two-sided test'}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>Antal par</span>
+                      <strong>{session.pairedT.pairCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Medelskillnad</span>
+                      <strong>{formatValue(session.pairedT.meanDifference)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>t</span>
+                      <strong>{formatValue(session.pairedT.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Frihetsgrader</span>
+                      <strong>{session.pairedT.degreesOfFreedom}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.pairedT.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>H₀ skillnad</span>
+                      <strong>{formatValue(session.pairedT.hypothesizedDifference)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.pairedT.alpha)} % KI för parade skillnader: [
+                    {formatValue(session.pairedT.confidenceInterval[0])},{' '}
+                    {formatValue(session.pairedT.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.pairedT.alpha)} ${session.pairedT.pValue < session.pairedT.alpha ? 'förkastas H₀; medelskillnaden är statistiskt signifikant.' : 'kan H₀ inte förkastas; medelskillnaden är inte statistiskt signifikant.'}`
+                      : `At α = ${formatValue(session.pairedT.alpha)} ${session.pairedT.pValue < session.pairedT.alpha ? 'reject H₀; the mean difference is statistically significant.' : 'do not reject H₀; the mean difference is not statistically significant.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Antaganden: oberoende par och ungefär normalfördelade differenser vid små urval; antagandena har inte testats.'
+                      : 'Assumptions: independent pairs and approximately normal differences for small samples; assumptions were not tested.'}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -1204,6 +1301,17 @@ function App() {
         onOpenChange={setTwoSampleTDialogOpen}
         onSubmit={(columnId1, columnId2, difference, alpha) => {
           void runTwoSampleTAnalysis(columnId1, columnId2, difference, alpha)
+        }}
+      />
+      <PairedTDialog
+        open={pairedTDialogOpen}
+        initialColumn1={numericColumns[0]?.id ?? ''}
+        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setPairedTDialogOpen}
+        onSubmit={(columnId1, columnId2, difference, alpha) => {
+          void runPairedTAnalysis(columnId1, columnId2, difference, alpha)
         }}
       />
       {toast && (

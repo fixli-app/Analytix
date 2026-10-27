@@ -29,6 +29,7 @@ npm run build
 - Calculate menu: worker-backed sample z-score standardization, stored in a new undoable numeric column; missing observations remain missing.
 - Statistics menu: two-sided one-sample t-test with editable hypothesized mean and α, p-value, confidence interval, conclusion, and explicit untested assumptions.
 - Statistics menu: two-sided Welch two-sample t-test with selectable numeric columns, hypothesized mean difference, α, p-value, confidence interval, conclusion, and explicit untested assumptions.
+- Statistics menu: paired t-test based on row-aligned observations, with pairwise missing-data handling, α, confidence interval, conclusion, and explicit untested assumptions.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -42,9 +43,10 @@ npm run build
 | Sample z-score standardization                                                                        | Implemented; not independently reference-verified | `src/stats/__tests__/transform.test.ts`; hand-calculated fixture `[1, 2, 3] -> [-1, 0, 1]`; an external reference comparison remains                                                   |
 | Two-sided one-sample t-test                                                                           | Implemented; not independently reference-verified | `src/stats/__tests__/oneSampleT.test.ts`; fixture `[2, 3, 5, 4, 6]`, μ₀=3; expected p=0.23019964108; an external NIST/R/SciPy comparison remains                                       |
 | Two-sided Welch two-sample t-test                                                                     | Implemented; not independently reference-verified | `src/stats/__tests__/twoSampleT.test.ts`; fixture `[5, 7, 8, 6, 9]` vs `[2, 3, 4, 5, 6]`; unequal-variance CI and p-value fixture; an external reference comparison remains            |
+| Paired two-sided t-test                                                                               | Implemented; not independently reference-verified | `src/stats/__tests__/pairedT.test.ts`; within-row difference fixture; missing pairs omitted; an external reference comparison remains                                                  |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
-The thirty-two current tests cover descriptive summaries, standardization, one- and two-sample t-tests, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
+The thirty-six current tests cover descriptive summaries, standardization, one-, two-sample and paired t-tests, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 ## Architecture
 
