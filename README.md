@@ -31,6 +31,7 @@ npm run build
 - Statistics menu: two-sided Welch two-sample t-test with selectable numeric columns, hypothesized mean difference, α, p-value, confidence interval, conclusion, and explicit untested assumptions.
 - Statistics menu: paired t-test based on row-aligned observations, with pairwise missing-data handling, α, confidence interval, conclusion, and explicit untested assumptions.
 - Statistics menu: one-proportion Z-test for binary 0/1 columns, with normal-approximation expected counts and a Wilson score confidence interval.
+- Statistics menu: two-proportion Z-test for two independent binary columns, using pooled null standard error and a Newcombe-Wilson confidence interval.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -46,9 +47,10 @@ npm run build
 | Two-sided Welch two-sample t-test                                                                     | Implemented; not independently reference-verified | `src/stats/__tests__/twoSampleT.test.ts`; fixture `[5, 7, 8, 6, 9]` vs `[2, 3, 4, 5, 6]`; unequal-variance CI and p-value fixture; an external reference comparison remains            |
 | Paired two-sided t-test                                                                               | Implemented; not independently reference-verified | `src/stats/__tests__/pairedT.test.ts`; within-row difference fixture; missing pairs omitted; an external reference comparison remains                                                  |
 | Two-sided one-proportion Z-test                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/oneProportion.test.ts`; 26/40 successes vs p₀=0.5; Wilson interval and p-value fixture; an external reference comparison remains                                  |
+| Two-sided two-proportion Z-test                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/twoProportions.test.ts`; 26/40 vs 18/40; pooled z and Newcombe-Wilson interval fixture; an external reference comparison remains                                  |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
-The thirty-nine current tests cover descriptive summaries, standardization, one-proportion, one-/two-sample and paired t-tests, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
+The forty-two current tests cover descriptive summaries, standardization, one-/two-proportion tests, one-/two-sample and paired t-tests, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 ## Architecture
 

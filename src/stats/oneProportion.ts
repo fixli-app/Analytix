@@ -55,13 +55,17 @@ export function oneProportion(
     statistic,
     pValue,
     alpha,
-    confidenceInterval: wilsonInterval(successes, count, criticalValue),
+    confidenceInterval: wilsonScoreInterval(successes, count, criticalValue),
     expectedSuccesses: count * hypothesizedProportion,
     expectedFailures: count * (1 - hypothesizedProportion),
   }
 }
 
-function wilsonInterval(successes: number, count: number, criticalValue: number): [number, number] {
+export function wilsonScoreInterval(
+  successes: number,
+  count: number,
+  criticalValue: number,
+): [number, number] {
   const proportion = successes / count
   const criticalSquared = criticalValue ** 2
   const denominator = 1 + criticalSquared / count
