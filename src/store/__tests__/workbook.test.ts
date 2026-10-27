@@ -30,4 +30,48 @@ describe('workbook history and editing', () => {
     useWorkbookStore.getState().undo()
     expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(['1'])
   })
+
+  it('deletes a row and restores it with undo', () => {
+    useWorkbookStore.setState({ rows: [{ C1: '1' }, { C1: '2' }] })
+    useWorkbookStore.getState().deleteRow(0)
+    expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(['2'])
+
+    useWorkbookStore.getState().undo()
+    expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(['1', '2'])
+  })
+
+  it('does not allow deleting the last column', () => {
+    expect(useWorkbookStore.getState().deleteColumn('C1')).toBe(false)
+    expect(useWorkbookStore.getState().columns).toHaveLength(1)
+  })
+
+  it('deletes a column and restores it with undo', () => {
+    useWorkbookStore.setState({
+      columns: [
+        { id: 'C1', name: 'A', type: 'numeric' },
+        { id: 'C2', name: 'B', type: 'text' },
+      ],
+      rows: [{ C1: '1', C2: 'x' }],
+    })
+    expect(useWorkbookStore.getState().deleteColumn('C2')).toBe(true)
+    expect(useWorkbookStore.getState().rows[0].C2).toBeUndefined()
+
+    useWorkbookStore.getState().undo()
+    expect(useWorkbookStore.getState().rows[0].C2).toBe('x')
+  })
+
+  it('replaces missing cells in one column and supports undo', () => {
+    useWorkbookStore.setState({ rows: [{ C1: '1' }, { C1: '' }, {}] })
+    useWorkbookStore.getState().replaceMissing('C1', '0')
+    expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(['1', '0', '0'])
+
+    useWorkbookStore.getState().undo()
+    expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(['1', '', undefined])
+  })
+
+  it('sorts numeric values in descending order', () => {
+    useWorkbookStore.setState({ rows: [{ C1: '2' }, { C1: '10' }, { C1: '1' }] })
+    useWorkbookStore.getState().sortByColumn('C1', 'descending')
+    expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(['10', '2', '1'])
+  })
 })

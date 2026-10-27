@@ -62,7 +62,15 @@ const menuKeys = [
 const menuContent: Record<string, string[]> = {
   file: ['Nytt projekt', 'Öppna projekt…', 'Spara projekt', 'Importera data…', 'Exportera som CSV'],
   edit: ['Ångra', 'Gör om', 'Kopiera session'],
-  data: ['Sortera efter aktiv kolumn', 'Infoga rad', 'Lägg till kolumn'],
+  data: [
+    'sortAscending',
+    'sortDescending',
+    'deleteActiveRow',
+    'deleteActiveColumn',
+    'replaceMissing',
+    'addRow',
+    'addColumn',
+  ],
   calculate: ['Beskrivande statistik'],
   statistics: ['Beskrivande statistik', 'Fler analyser kommer i kommande faser'],
   graphs: ['Diagram kommer i kommande faser'],
@@ -70,6 +78,15 @@ const menuContent: Record<string, string[]> = {
   tools: ['Inställningar'],
   window: ['Arbetsblad', 'Session'],
   help: ['Om StatLab', 'Analysstatus'],
+}
+const actionLabelKeys: Record<string, string> = {
+  sortAscending: 'sortAscending',
+  sortDescending: 'sortDescending',
+  deleteActiveRow: 'deleteActiveRow',
+  deleteActiveColumn: 'deleteActiveColumn',
+  replaceMissing: 'replaceMissing',
+  addRow: 'addRow',
+  addColumn: 'addColumn',
 }
 
 interface SessionResult {
@@ -172,8 +189,11 @@ function App() {
   const activeCell = useWorkbookStore((state) => state.activeCell)
   const setCell = useWorkbookStore((state) => state.setCell)
   const pasteCells = useWorkbookStore((state) => state.pasteCells)
-  const addRow = useWorkbookStore((state) => state.addRow)
+  const insertRow = useWorkbookStore((state) => state.insertRow)
   const addColumn = useWorkbookStore((state) => state.addColumn)
+  const deleteRow = useWorkbookStore((state) => state.deleteRow)
+  const deleteColumn = useWorkbookStore((state) => state.deleteColumn)
+  const replaceMissing = useWorkbookStore((state) => state.replaceMissing)
   const renameColumn = useWorkbookStore((state) => state.renameColumn)
   const replaceData = useWorkbookStore((state) => state.replaceData)
   const sortByColumn = useWorkbookStore((state) => state.sortByColumn)
@@ -181,6 +201,7 @@ function App() {
   const undo = useWorkbookStore((state) => state.undo)
   const redo = useWorkbookStore((state) => state.redo)
   const [targetColumn, setTargetColumn] = useState('C4')
+  const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending')
   const [session, setSession] = useState<SessionResult | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
@@ -310,12 +331,32 @@ function App() {
 
   function showMenuAction(action: string) {
     setMenuOpen(null)
-    if (action === 'Infoga rad') addRow()
-    else if (action === 'Lägg till kolumn') addColumn()
+    if (action === 'addRow') insertRow(activeCell.row)
+    else if (action === 'addColumn') addColumn()
     else if (action === 'Ångra') undo()
     else if (action === 'Gör om') redo()
-    else if (action === 'Sortera efter aktiv kolumn' && activeColumn) sortByColumn(activeColumn.id)
-    else if (action === 'Exportera som CSV') exportCsv()
+    else if (action === 'sortAscending' && activeColumn) {
+      sortByColumn(activeColumn.id, 'ascending')
+      setSortDirection('descending')
+    } else if (action === 'sortDescending' && activeColumn) {
+      sortByColumn(activeColumn.id, 'descending')
+      setSortDirection('ascending')
+    } else if (action === 'deleteActiveRow') deleteRow(activeCell.row)
+    else if (action === 'deleteActiveColumn' && activeColumn) {
+      if (columns.length <= 1) setToast('Minst en kolumn måste finnas kvar.')
+      else {
+        deleteColumn(activeColumn.id)
+        const remainingNumeric = columns.find(
+          (column) => column.id !== activeColumn.id && column.type === 'numeric',
+        )
+        setTargetColumn(
+          remainingNumeric?.id ?? columns.find((column) => column.id !== activeColumn.id)!.id,
+        )
+      }
+    } else if (action === 'replaceMissing' && activeColumn) {
+      const replacement = window.prompt(`Ersätt saknade värden i ${activeColumn.name} med:`, '0')
+      if (replacement !== null) replaceMissing(activeColumn.id, replacement)
+    } else if (action === 'Exportera som CSV') exportCsv()
     else if (action === 'Importera data…') fileInputRef.current?.click()
     else if (action === 'Öppna projekt…') projectInputRef.current?.click()
     else if (action === 'Spara projekt') saveProject()
@@ -474,7 +515,7 @@ function App() {
                 role="menuitem"
                 onClick={() => showMenuAction(action)}
               >
-                {action}
+                {actionLabelKeys[action] ? t(actionLabelKeys[action]) : action}
               </button>
             ))}
           </div>
@@ -515,7 +556,7 @@ function App() {
           <Download size={15} />
           {t('export')}
         </button>
-        <button className="toolbar-button" type="button" onClick={addRow}>
+        <button className="toolbar-button" type="button" onClick={() => insertRow(activeCell.row)}>
           <Rows3 size={15} />
           {t('addRow')}
         </button>
@@ -634,7 +675,10 @@ function App() {
                 type="button"
                 title={language === 'sv' ? 'Sortera aktiv kolumn' : 'Sort active column'}
                 aria-label={language === 'sv' ? 'Sortera aktiv kolumn' : 'Sort active column'}
-                onClick={() => activeColumn && sortByColumn(activeColumn.id)}
+                onClick={() => {
+                  if (activeColumn) sortByColumn(activeColumn.id, sortDirection)
+                  setSortDirection(sortDirection === 'ascending' ? 'descending' : 'ascending')
+                }}
               >
                 <ArrowDownAZ size={15} />
               </button>

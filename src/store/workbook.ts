@@ -22,10 +22,14 @@ interface WorkbookState extends WorkbookSnapshot {
   setCell: (row: number, columnId: string, value: string) => void
   pasteCells: (row: number, column: number, values: string[][]) => void
   addRow: () => void
+  insertRow: (rowIndex: number) => void
   addColumn: () => void
+  deleteRow: (rowIndex: number) => void
+  deleteColumn: (columnId: string) => boolean
   renameColumn: (columnId: string, name: string) => void
+  replaceMissing: (columnId: string, replacement: string) => void
   replaceData: (columns: SheetColumn[], rows: SheetRow[]) => void
-  sortByColumn: (columnId: string) => void
+  sortByColumn: (columnId: string, direction?: 'ascending' | 'descending') => void
   undo: () => void
   redo: () => void
 }
@@ -101,22 +105,70 @@ export const useWorkbookStore = create<WorkbookState>()(
         state.future = []
         state.rows.push(Object.fromEntries(state.columns.map((column) => [column.id, ''])))
       }),
+    insertRow: (rowIndex) =>
+      set((state) => {
+        state.past.push(snapshot(state))
+        state.future = []
+        const index = Math.max(0, Math.min(rowIndex, state.rows.length))
+        state.rows.splice(
+          index,
+          0,
+          Object.fromEntries(state.columns.map((column) => [column.id, ''])),
+        )
+        state.activeCell.row = index
+      }),
     addColumn: () =>
       set((state) => {
         state.past.push(snapshot(state))
         state.future = []
-        const id = `C${state.columns.length + 1}`
+        let nextNumber = state.columns.length + 1
+        while (state.columns.some((column) => column.id === `C${nextNumber}`)) nextNumber += 1
+        const id = `C${nextNumber}`
         state.columns.push({ id, name: `Variabel ${state.columns.length + 1}`, type: 'numeric' })
         state.rows.forEach((row) => {
           row[id] = ''
         })
       }),
+    deleteRow: (rowIndex) =>
+      set((state) => {
+        if (rowIndex < 0 || rowIndex >= state.rows.length) return
+        state.past.push(snapshot(state))
+        state.future = []
+        state.rows.splice(rowIndex, 1)
+        state.activeCell.row = Math.min(rowIndex, Math.max(state.rows.length - 1, 0))
+      }),
+    deleteColumn: (columnId) => {
+      let deleted = false
+      set((state) => {
+        if (state.columns.length <= 1 || !state.columns.some((column) => column.id === columnId))
+          return
+        state.past.push(snapshot(state))
+        state.future = []
+        const columnIndex = state.columns.findIndex((column) => column.id === columnId)
+        state.columns.splice(columnIndex, 1)
+        state.rows.forEach((row) => {
+          delete row[columnId]
+        })
+        state.activeCell.column = Math.min(columnIndex, state.columns.length - 1)
+        deleted = true
+      })
+      return deleted
+    },
     renameColumn: (columnId, name) =>
       set((state) => {
         state.past.push(snapshot(state))
         state.future = []
         const column = state.columns.find((item) => item.id === columnId)
         if (column) column.name = name
+      }),
+    replaceMissing: (columnId, replacement) =>
+      set((state) => {
+        if (!state.rows.some((row) => row[columnId] === '' || row[columnId] === undefined)) return
+        state.past.push(snapshot(state))
+        state.future = []
+        state.rows.forEach((row) => {
+          if (row[columnId] === '' || row[columnId] === undefined) row[columnId] = replacement
+        })
       }),
     replaceData: (columns, rows) =>
       set((state) => {
@@ -126,7 +178,7 @@ export const useWorkbookStore = create<WorkbookState>()(
         state.rows = rows
         state.activeCell = { row: 0, column: 0 }
       }),
-    sortByColumn: (columnId) =>
+    sortByColumn: (columnId, direction = 'ascending') =>
       set((state) => {
         state.past.push(snapshot(state))
         state.future = []
@@ -134,8 +186,11 @@ export const useWorkbookStore = create<WorkbookState>()(
         state.rows.sort((left, right) => {
           const a = left[columnId] ?? ''
           const b = right[columnId] ?? ''
-          if (column?.type === 'numeric') return (Number(a) || 0) - (Number(b) || 0)
-          return a.localeCompare(b, 'sv')
+          const comparison =
+            column?.type === 'numeric'
+              ? (Number(a) || 0) - (Number(b) || 0)
+              : a.localeCompare(b, 'sv')
+          return direction === 'ascending' ? comparison : -comparison
         })
       }),
     undo: () =>

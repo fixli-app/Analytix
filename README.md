@@ -24,6 +24,7 @@ npm run build
 ## Current functionality
 
 - Virtualized editable worksheet with an example production dataset, numeric/text columns, row and column insertion, ascending sort, keyboard undo/redo, and tab/newline paste.
+- Data menu: ascending/descending typed sort, insert/delete active row, delete active column (last-column guard), and replace missing values. These operations are undoable.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -36,7 +37,7 @@ npm run build
 | Descriptive summary subset (n, mean, median, sample SD, min, max) | Implemented; not independently reference-verified | `src/stats/__tests__/descriptive.test.ts`; hand-calculated fixture `[1, 2, 3, 4]`; sample SD tolerance `1e-12` decimal places. An external NIST/R/SciPy reference comparison remains |
 | Other requested statistical analyses                              | Not started                                       | No implementation or reference fixture yet                                                                                                                                           |
 
-The seven current tests cover the descriptive summary and workbook undo/paste behavior. This is not the requested 90% statistics coverage target. No analysis is currently marked externally verified.
+The twelve current tests cover the descriptive summary and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. No analysis is currently marked externally verified.
 
 ## Architecture
 
@@ -51,4 +52,4 @@ The app uses React 18, strict TypeScript, Vite, Tailwind CSS, TanStack Virtual, 
 
 ## Limitations
 
-This is an initial working slice, not a complete statistical package. Multiple worksheets, advanced data operations, analysis dialogs, inference/regression/quality/DOE methods, charts, report builder, macros, accessibility audit, offline PWA, and full help content remain unfinished. The 500,000-row performance goal has not been benchmarked. Only the documented descriptive-statistics subset is reference-verified; all results are visibly marked unverified in the session.
+This is an initial working slice, not a complete statistical package. Multiple worksheets, stacking/splitting/merging/subsetting/filtering/type conversion/ranking/random sampling, analysis dialogs, inference/regression/quality/DOE methods, charts, report builder, macros, accessibility audit, offline PWA, and full help content remain unfinished. The 500,000-row performance goal has not been benchmarked. Descriptive statistics has a hand-calculated test fixture but no independent reference verification; results are visibly marked unverified in the session.
