@@ -738,6 +738,110 @@ input:focus-visible {
   font-size: 11px;
   animation: rise-in 0.25s ease both;
 }
+.dialog-overlay {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  background: #101b16a6;
+  animation: rise-in 0.15s ease both;
+}
+.dialog-content {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 50%;
+  width: min(440px, calc(100vw - 32px));
+  padding: 21px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  box-shadow: 0 24px 70px #08130d40;
+  transform: translate(-50%, -50%);
+}
+.dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.dialog-title {
+  color: var(--ink);
+  font-family: Georgia, serif;
+  font-size: 21px;
+  font-weight: 400;
+}
+.dialog-description {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.dialog-field {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.dialog-field input,
+.dialog-field select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 21px;
+}
+.dialog-button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.dialog-button.secondary {
+  background: var(--paper);
+  color: var(--muted);
+}
+.dialog-button.primary {
+  border-color: var(--rail);
+  background: var(--rail);
+  color: #fff;
+}
+.dialog-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.t-test-result {
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+.t-test-result h4 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 10px;
+}
+.t-test-grid .stat-cell {
+  min-height: 42px;
+}
+.session-conclusion {
+  margin: 9px 0 0;
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.5;
+}
 @keyframes rise-in {
   from {
     opacity: 0;

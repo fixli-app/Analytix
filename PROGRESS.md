@@ -20,6 +20,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 - [ ] Beräkna: kalkylator med matematiska/statistiska/logiska funktioner radvis och kolumnvis; beskrivande kolumnstatistik; standardisering; slumpdata från normal, uniform, binomial, Poisson, exponential, gamma, beta, t, chi-två, F, Weibull, lognormal och andra vanliga fördelningar; pdf, cdf och invers cdf. Status: ej påbörjad.
 - [x] Beräkna-delmodul: sample z-score-standardisering via worker, lagras som ny undo-bar numerisk kolumn; saknade värden bevaras och konstant/för liten/tom kolumn ger begripliga fel. Status: klar; 5 tester med handberäknat fixture `[1, 2, 3]`, extern referensverifiering återstår.
 - [ ] Statistik > Grundläggande: grafisk sammanfattning; beskrivande statistik; 1-urvals Z/t; 2-urvals t; parat t; 1/2 proportioner; 1/2-urvals Poisson-hastighet; jämförelse av två varianser, Bartlett, Levene; korrelation; kovarians; Anderson-Darling, Ryan-Joiner och Kolmogorov-Smirnov normalitetstest; Poisson goodness-of-fit. Status: ej påbörjad.
+- [x] Statistik-delmodul: tvåsidigt 1-urvals t-test med valbart μ₀/α och konfidensintervall, via worker; visar slutsats och antaganden som ej testade. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [ ] Tabeller: korstabell och chi-två; chi-två goodness-of-fit; beskrivande statistik för tabeller; Fisher exakt test. Status: ej påbörjad.
 - [ ] Grafik: histogram (enkelt, anpassad fördelning, flera grupper); boxplot; individuellt värdediagram; punkt-, linje-, stapel- och cirkeldiagram; sannolikhetsdiagram; empirisk CDF; matris- och marginaldiagram; bubbeldiagram; 3D-spridning och yta; kontur-, intervall-, tidsserie- och områdesdiagram; dot plot; violin. Status: ej påbörjad.
 - [x] Delmängd av beskrivande statistik: antal, medelvärde, median, stickprovsstandardavvikelse, varians, standardfel, R-7-kvartiler, variationsbredd, minimum och maximum. Status: klar; handberäknat fixture `[1, 2, 3, 4]` testas med tolerans, men oberoende NIST/R/SciPy-verifiering återstår. Övriga beskrivande mått/analyser återstår.
@@ -80,6 +81,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (23 tester) och `npm run build` passerar.
-- Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema och 390 px mobilvy kontrollerade.
-- Nästa steg: fortsätt Fas 1 med filter och typ-/saknadsvärdesåtgärder. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (28 tester) och `npm run build` passerar.
+- Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema, 390 px mobilvy, sökfilter och 1-urvals t-test kontrollerade.
+- Nästa steg: fortsätt Fas 1 med två-urvals t-test och fler grundläggande analyser. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.

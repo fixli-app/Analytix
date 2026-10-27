@@ -48,6 +48,8 @@ import { statsWorker } from './workers/client'
 import { loadAutosave, saveAutosave } from './utils/projects'
 import { filterRowIndexes } from './utils/filterRows'
 import type { DescriptiveSummary } from './stats/descriptive'
+import type { OneSampleTResult } from './stats/oneSampleT'
+import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
 
 const menuKeys = [
   'file',
@@ -74,7 +76,7 @@ const menuContent: Record<string, string[]> = {
     'addColumn',
   ],
   calculate: ['Beskrivande statistik', 'standardizeColumn'],
-  statistics: ['Beskrivande statistik', 'Fler analyser kommer i kommande faser'],
+  statistics: ['oneSampleT', 'Beskrivande statistik', 'Fler analyser kommer i kommande faser'],
   graphs: ['Diagram kommer i kommande faser'],
   editor: ['Makron kommer i kommande faser'],
   tools: ['Inställningar'],
@@ -90,17 +92,26 @@ const actionLabelKeys: Record<string, string> = {
   addRow: 'addRow',
   addColumn: 'addColumn',
   standardizeColumn: 'standardizeColumn',
+  oneSampleT: 'oneSampleT',
 }
 
 interface SessionResult {
   title: string
   columnName: string
   summary: DescriptiveSummary
+  oneSampleT?: OneSampleTResult
   createdAt: Date
 }
 
 function formatValue(value: number): string {
   return new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 3 }).format(value)
+}
+
+function formatPValue(value: number, language: string): string {
+  if (value < 0.001) return language === 'sv' ? '< 0,001' : '< 0.001'
+  return new Intl.NumberFormat(language === 'sv' ? 'sv-SE' : 'en-US', {
+    maximumFractionDigits: 3,
+  }).format(value)
 }
 
 function GridCell({
@@ -208,6 +219,7 @@ function App() {
   const [filterQuery, setFilterQuery] = useState('')
   const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending')
   const [session, setSession] = useState<SessionResult | null>(null)
+  const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -358,6 +370,33 @@ function App() {
     }
   }
 
+  async function runOneSampleTAnalysis(columnId: string, hypothesizedMean: number, alpha: number) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn för 1-urvals t-testet.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.oneSampleT(values, hypothesizedMean, alpha),
+        statsWorker.describe(values),
+      ])
+      setSession({
+        title: '1-urvals t-test',
+        columnName: column.name,
+        summary,
+        oneSampleT: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'T-testet kunde inte genomföras.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -391,6 +430,7 @@ function App() {
     else if (action === 'Spara projekt') saveProject()
     else if (action === 'Beskrivande statistik') void runAnalysis()
     else if (action === 'standardizeColumn') void standardizeSelectedColumn()
+    else if (action === 'oneSampleT') setOneSampleTDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -477,7 +517,10 @@ function App() {
   async function copySession() {
     if (!session) return
     const { summary } = session
-    const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}\nEj verifierad analys.`
+    const testResult = session.oneSampleT
+      ? `\nt(${session.oneSampleT.degreesOfFreedom}): ${formatValue(session.oneSampleT.statistic)}\ndf: ${session.oneSampleT.degreesOfFreedom}\np-värde: ${formatPValue(session.oneSampleT.pValue, language)}\nKI: [${formatValue(session.oneSampleT.confidenceInterval[0])}, ${formatValue(session.oneSampleT.confidenceInterval[1])}]`
+      : ''
+    const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
   }
@@ -920,6 +963,49 @@ function App() {
                   <strong>{formatValue(session.summary.maximum)}</strong>
                 </div>
               </div>
+              {session.oneSampleT && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Resultat från t-test' : 'T-test result'}
+                >
+                  <h4>
+                    {language === 'sv' ? 'Tvåsidigt test av medelvärde' : 'Two-sided mean test'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>t</span>
+                      <strong>{formatValue(session.oneSampleT.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Frihetsgrader</span>
+                      <strong>{session.oneSampleT.degreesOfFreedom}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.oneSampleT.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>H₀ medelvärde</span>
+                      <strong>{formatValue(session.oneSampleT.hypothesizedMean)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.oneSampleT.alpha)} % KI: [
+                    {formatValue(session.oneSampleT.confidenceInterval[0])},{' '}
+                    {formatValue(session.oneSampleT.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.oneSampleT.alpha)} ${session.oneSampleT.pValue < session.oneSampleT.alpha ? 'förkastas H₀; resultatet är statistiskt signifikant.' : 'kan H₀ inte förkastas; resultatet är inte statistiskt signifikant.'}`
+                      : `At α = ${formatValue(session.oneSampleT.alpha)} ${session.oneSampleT.pValue < session.oneSampleT.alpha ? 'reject H₀; the result is statistically significant.' : 'do not reject H₀; the result is not statistically significant.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Antaganden: oberoende observationer och ungefär normal population vid små urval; antagandena har inte testats.'
+                      : 'Assumptions: independent observations and an approximately normal population for small samples; assumptions were not tested.'}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -996,6 +1082,16 @@ function App() {
         onChange={(event) => {
           void openProject(event.target.files?.[0])
           event.target.value = ''
+        }}
+      />
+      <OneSampleTDialog
+        open={oneSampleTDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setOneSampleTDialogOpen}
+        onSubmit={(columnId, hypothesizedMean, alpha) => {
+          void runOneSampleTAnalysis(columnId, hypothesizedMean, alpha)
         }}
       />
       {toast && (
