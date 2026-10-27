@@ -51,9 +51,11 @@ import type { DescriptiveSummary } from './stats/descriptive'
 import type { OneSampleTResult } from './stats/oneSampleT'
 import type { TwoSampleTResult } from './stats/twoSampleT'
 import type { PairedTResult } from './stats/pairedT'
+import type { OneProportionResult } from './stats/oneProportion'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
 import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
 import { PairedTDialog } from './dialogs/PairedTDialog'
+import { OneProportionDialog } from './dialogs/OneProportionDialog'
 
 const menuKeys = [
   'file',
@@ -84,6 +86,7 @@ const menuContent: Record<string, string[]> = {
     'oneSampleT',
     'twoSampleT',
     'pairedT',
+    'oneProportion',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -105,6 +108,7 @@ const actionLabelKeys: Record<string, string> = {
   oneSampleT: 'oneSampleT',
   twoSampleT: 'twoSampleT',
   pairedT: 'pairedT',
+  oneProportion: 'oneProportion',
 }
 
 interface SessionResult {
@@ -114,6 +118,7 @@ interface SessionResult {
   oneSampleT?: OneSampleTResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
+  oneProportion?: OneProportionResult
   createdAt: Date
 }
 
@@ -236,6 +241,7 @@ function App() {
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
+  const [oneProportionDialogOpen, setOneProportionDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -489,6 +495,37 @@ function App() {
     }
   }
 
+  async function runOneProportionAnalysis(
+    columnId: string,
+    hypothesizedProportion: number,
+    alpha: number,
+  ) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk 0/1-kolumn för proportionstestet.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.oneProportion(values, hypothesizedProportion, alpha),
+        statsWorker.describe(values),
+      ])
+      setSession({
+        title: '1-proportion Z-test',
+        columnName: column.name,
+        summary,
+        oneProportion: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Proportionstestet kunde inte genomföras.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -525,6 +562,7 @@ function App() {
     else if (action === 'oneSampleT') setOneSampleTDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
+    else if (action === 'oneProportion') setOneProportionDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -617,7 +655,9 @@ function App() {
         ? `\nt(${formatValue(session.twoSampleT.degreesOfFreedom)}): ${formatValue(session.twoSampleT.statistic)}\nMedelskillnad: ${formatValue(session.twoSampleT.difference)}\np-värde: ${formatPValue(session.twoSampleT.pValue, language)}\nKI: [${formatValue(session.twoSampleT.confidenceInterval[0])}, ${formatValue(session.twoSampleT.confidenceInterval[1])}]`
         : session.pairedT
           ? `\nt(${session.pairedT.degreesOfFreedom}): ${formatValue(session.pairedT.statistic)}\nAntal par: ${session.pairedT.pairCount}\nMedelskillnad: ${formatValue(session.pairedT.meanDifference)}\np-värde: ${formatPValue(session.pairedT.pValue, language)}\nKI: [${formatValue(session.pairedT.confidenceInterval[0])}, ${formatValue(session.pairedT.confidenceInterval[1])}]`
-          : ''
+          : session.oneProportion
+            ? `\nz: ${formatValue(session.oneProportion.statistic)}\nAndel: ${formatValue(session.oneProportion.observedProportion)}\np-värde: ${formatPValue(session.oneProportion.pValue, language)}\nKI: [${formatValue(session.oneProportion.confidenceInterval[0])}, ${formatValue(session.oneProportion.confidenceInterval[1])}]`
+            : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1204,6 +1244,61 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.oneProportion && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? '1-proportionstestresultat' : 'One-proportion test result'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Tvåsidigt 1-proportion Z-test'
+                      : 'Two-sided one-proportion Z-test'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.oneProportion.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Framgångar</span>
+                      <strong>{session.oneProportion.successes}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Observerad andel</span>
+                      <strong>{formatValue(session.oneProportion.observedProportion)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>z</span>
+                      <strong>{formatValue(session.oneProportion.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.oneProportion.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>H₀ proportion</span>
+                      <strong>{formatValue(session.oneProportion.hypothesizedProportion)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.oneProportion.alpha)} % Wilson-KI: [
+                    {formatValue(session.oneProportion.confidenceInterval[0])},{' '}
+                    {formatValue(session.oneProportion.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.oneProportion.alpha)} ${session.oneProportion.pValue < session.oneProportion.alpha ? 'förkastas H₀; andelen skiljer sig statistiskt signifikant från p₀.' : 'kan H₀ inte förkastas; ingen statistiskt signifikant skillnad från p₀ visas.'}`
+                      : `At α = ${formatValue(session.oneProportion.alpha)} ${session.oneProportion.pValue < session.oneProportion.alpha ? 'reject H₀; the proportion differs significantly from p₀.' : 'do not reject H₀; no significant difference from p₀ is shown.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `Normalapproximation; förväntat under H₀: ${formatValue(session.oneProportion.expectedSuccesses)} framgångar och ${formatValue(session.oneProportion.expectedFailures)} misslyckanden. Små förväntade antal kan försämra approximationen.`
+                      : `Normal approximation; expected under H₀: ${formatValue(session.oneProportion.expectedSuccesses)} successes and ${formatValue(session.oneProportion.expectedFailures)} failures. Small expected counts can reduce accuracy.`}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -1312,6 +1407,16 @@ function App() {
         onOpenChange={setPairedTDialogOpen}
         onSubmit={(columnId1, columnId2, difference, alpha) => {
           void runPairedTAnalysis(columnId1, columnId2, difference, alpha)
+        }}
+      />
+      <OneProportionDialog
+        open={oneProportionDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setOneProportionDialogOpen}
+        onSubmit={(columnId, hypothesizedProportion, alpha) => {
+          void runOneProportionAnalysis(columnId, hypothesizedProportion, alpha)
         }}
       />
       {toast && (
