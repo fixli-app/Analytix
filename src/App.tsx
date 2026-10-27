@@ -49,7 +49,9 @@ import { loadAutosave, saveAutosave } from './utils/projects'
 import { filterRowIndexes } from './utils/filterRows'
 import type { DescriptiveSummary } from './stats/descriptive'
 import type { OneSampleTResult } from './stats/oneSampleT'
+import type { TwoSampleTResult } from './stats/twoSampleT'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
+import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
 
 const menuKeys = [
   'file',
@@ -76,7 +78,12 @@ const menuContent: Record<string, string[]> = {
     'addColumn',
   ],
   calculate: ['Beskrivande statistik', 'standardizeColumn'],
-  statistics: ['oneSampleT', 'Beskrivande statistik', 'Fler analyser kommer i kommande faser'],
+  statistics: [
+    'oneSampleT',
+    'twoSampleT',
+    'Beskrivande statistik',
+    'Fler analyser kommer i kommande faser',
+  ],
   graphs: ['Diagram kommer i kommande faser'],
   editor: ['Makron kommer i kommande faser'],
   tools: ['Inställningar'],
@@ -93,6 +100,7 @@ const actionLabelKeys: Record<string, string> = {
   addColumn: 'addColumn',
   standardizeColumn: 'standardizeColumn',
   oneSampleT: 'oneSampleT',
+  twoSampleT: 'twoSampleT',
 }
 
 interface SessionResult {
@@ -100,6 +108,7 @@ interface SessionResult {
   columnName: string
   summary: DescriptiveSummary
   oneSampleT?: OneSampleTResult
+  twoSampleT?: TwoSampleTResult
   createdAt: Date
 }
 
@@ -220,6 +229,7 @@ function App() {
   const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending')
   const [session, setSession] = useState<SessionResult | null>(null)
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
+  const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -397,6 +407,43 @@ function App() {
     }
   }
 
+  async function runTwoSampleTAnalysis(
+    columnId1: string,
+    columnId2: string,
+    hypothesizedDifference: number,
+    alpha: number,
+  ) {
+    const column1 = columns.find((item) => item.id === columnId1)
+    const column2 = columns.find((item) => item.id === columnId2)
+    if (!column1 || !column2 || column1.type !== 'numeric' || column2.type !== 'numeric') {
+      setToast('Välj två numeriska kolumner för 2-urvals t-testet.')
+      return
+    }
+    const values1 = rows.map((row) => {
+      const raw = row[column1.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const values2 = rows.map((row) => {
+      const raw = row[column2.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.twoSampleT(values1, values2, hypothesizedDifference, alpha),
+        statsWorker.describe(values1),
+      ])
+      setSession({
+        title: '2-urvals t-test (Welch)',
+        columnName: `${column1.name} − ${column2.name}`,
+        summary,
+        twoSampleT: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'T-testet kunde inte genomföras.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -431,6 +478,7 @@ function App() {
     else if (action === 'Beskrivande statistik') void runAnalysis()
     else if (action === 'standardizeColumn') void standardizeSelectedColumn()
     else if (action === 'oneSampleT') setOneSampleTDialogOpen(true)
+    else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -519,7 +567,9 @@ function App() {
     const { summary } = session
     const testResult = session.oneSampleT
       ? `\nt(${session.oneSampleT.degreesOfFreedom}): ${formatValue(session.oneSampleT.statistic)}\ndf: ${session.oneSampleT.degreesOfFreedom}\np-värde: ${formatPValue(session.oneSampleT.pValue, language)}\nKI: [${formatValue(session.oneSampleT.confidenceInterval[0])}, ${formatValue(session.oneSampleT.confidenceInterval[1])}]`
-      : ''
+      : session.twoSampleT
+        ? `\nt(${formatValue(session.twoSampleT.degreesOfFreedom)}): ${formatValue(session.twoSampleT.statistic)}\nMedelskillnad: ${formatValue(session.twoSampleT.difference)}\np-värde: ${formatPValue(session.twoSampleT.pValue, language)}\nKI: [${formatValue(session.twoSampleT.confidenceInterval[0])}, ${formatValue(session.twoSampleT.confidenceInterval[1])}]`
+        : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1006,6 +1056,57 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.twoSampleT && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Welch t-testresultat' : 'Welch t-test result'}
+                >
+                  <h4>{language === 'sv' ? 'Welch tvåsidigt test' : 'Welch two-sided test'}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n₁ / n₂</span>
+                      <strong>
+                        {session.twoSampleT.count1} / {session.twoSampleT.count2}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Medelskillnad</span>
+                      <strong>{formatValue(session.twoSampleT.difference)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>t</span>
+                      <strong>{formatValue(session.twoSampleT.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Frihetsgrader</span>
+                      <strong>{formatValue(session.twoSampleT.degreesOfFreedom)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.twoSampleT.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>H₀ skillnad</span>
+                      <strong>{formatValue(session.twoSampleT.hypothesizedDifference)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.twoSampleT.alpha)} % KI för μ₁ − μ₂: [
+                    {formatValue(session.twoSampleT.confidenceInterval[0])},{' '}
+                    {formatValue(session.twoSampleT.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.twoSampleT.alpha)} ${session.twoSampleT.pValue < session.twoSampleT.alpha ? 'förkastas H₀; skillnaden är statistiskt signifikant.' : 'kan H₀ inte förkastas; skillnaden är inte statistiskt signifikant.'}`
+                      : `At α = ${formatValue(session.twoSampleT.alpha)} ${session.twoSampleT.pValue < session.twoSampleT.alpha ? 'reject H₀; the difference is statistically significant.' : 'do not reject H₀; the difference is not statistically significant.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Welch-metoden kräver inte lika varianser. Oberoende och normalitetsantaganden har inte testats.'
+                      : 'Welch does not assume equal variances. Independence and normality assumptions were not tested.'}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -1092,6 +1193,17 @@ function App() {
         onOpenChange={setOneSampleTDialogOpen}
         onSubmit={(columnId, hypothesizedMean, alpha) => {
           void runOneSampleTAnalysis(columnId, hypothesizedMean, alpha)
+        }}
+      />
+      <TwoSampleTDialog
+        open={twoSampleTDialogOpen}
+        initialColumn1={numericColumns[0]?.id ?? ''}
+        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setTwoSampleTDialogOpen}
+        onSubmit={(columnId1, columnId2, difference, alpha) => {
+          void runTwoSampleTAnalysis(columnId1, columnId2, difference, alpha)
         }}
       />
       {toast && (
