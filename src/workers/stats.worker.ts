@@ -8,6 +8,7 @@ import { pairedT } from '../stats/pairedT'
 import { standardize } from '../stats/transform'
 import { twoSampleT } from '../stats/twoSampleT'
 import { twoProportions } from '../stats/twoProportions'
+import { twoSamplePoissonRate } from '../stats/twoSamplePoissonRate'
 
 const api = {
   describe,
@@ -19,6 +20,7 @@ const api = {
   standardize,
   twoSampleT,
   twoProportions,
+  twoSamplePoissonRate,
 }
 
 export type StatsWorker = typeof api

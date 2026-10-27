@@ -55,6 +55,7 @@ import type { OneProportionResult } from './stats/oneProportion'
 import type { TwoProportionsResult } from './stats/twoProportions'
 import type { CorrelationResult } from './stats/correlation'
 import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
+import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
 import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
 import { PairedTDialog } from './dialogs/PairedTDialog'
@@ -62,6 +63,7 @@ import { OneProportionDialog } from './dialogs/OneProportionDialog'
 import { TwoProportionsDialog } from './dialogs/TwoProportionsDialog'
 import { CorrelationDialog } from './dialogs/CorrelationDialog'
 import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog'
+import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 
 const menuKeys = [
   'file',
@@ -96,6 +98,7 @@ const menuContent: Record<string, string[]> = {
     'twoProportions',
     'correlation',
     'oneSamplePoissonRate',
+    'twoSamplePoissonRate',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -121,6 +124,7 @@ const actionLabelKeys: Record<string, string> = {
   twoProportions: 'twoProportions',
   correlation: 'correlation',
   oneSamplePoissonRate: 'oneSamplePoissonRate',
+  twoSamplePoissonRate: 'twoSamplePoissonRate',
 }
 
 interface SessionResult {
@@ -134,6 +138,7 @@ interface SessionResult {
   twoProportions?: TwoProportionsResult
   correlation?: CorrelationResult
   oneSamplePoissonRate?: OneSamplePoissonRateResult
+  twoSamplePoissonRate?: TwoSamplePoissonRateResult
   createdAt: Date
 }
 
@@ -260,6 +265,7 @@ function App() {
   const [twoProportionsDialogOpen, setTwoProportionsDialogOpen] = useState(false)
   const [correlationDialogOpen, setCorrelationDialogOpen] = useState(false)
   const [oneSamplePoissonDialogOpen, setOneSamplePoissonDialogOpen] = useState(false)
+  const [twoSamplePoissonDialogOpen, setTwoSamplePoissonDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -642,6 +648,50 @@ function App() {
     }
   }
 
+  async function runTwoSamplePoissonAnalysis(
+    columnId1: string,
+    exposurePerObservation1: number,
+    columnId2: string,
+    exposurePerObservation2: number,
+    alpha: number,
+  ) {
+    const column1 = columns.find((item) => item.id === columnId1)
+    const column2 = columns.find((item) => item.id === columnId2)
+    if (!column1 || !column2 || column1.type !== 'numeric' || column2.type !== 'numeric') {
+      setToast('Välj två numeriska kolumner med heltalsräkningar.')
+      return
+    }
+    const counts1 = rows.map((row) => {
+      const raw = row[column1.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const counts2 = rows.map((row) => {
+      const raw = row[column2.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.twoSamplePoissonRate(
+          counts1,
+          exposurePerObservation1,
+          counts2,
+          exposurePerObservation2,
+          alpha,
+        ),
+        statsWorker.describe(counts1),
+      ])
+      setSession({
+        title: '2-urvals Poisson-hastighet',
+        columnName: `${column1.name} − ${column2.name}`,
+        summary,
+        twoSamplePoissonRate: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Poisson-testet kunde inte genomföras.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -682,6 +732,7 @@ function App() {
     else if (action === 'twoProportions') setTwoProportionsDialogOpen(true)
     else if (action === 'correlation') setCorrelationDialogOpen(true)
     else if (action === 'oneSamplePoissonRate') setOneSamplePoissonDialogOpen(true)
+    else if (action === 'twoSamplePoissonRate') setTwoSamplePoissonDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -782,7 +833,9 @@ function App() {
                 ? `\nr: ${formatValue(session.correlation.correlation)}\nKovarians: ${formatValue(session.correlation.covariance)}\nt: ${formatValue(session.correlation.statistic)}\np-värde: ${formatPValue(session.correlation.pValue, language)}\nKI: [${formatValue(session.correlation.confidenceInterval[0])}, ${formatValue(session.correlation.confidenceInterval[1])}]`
                 : session.oneSamplePoissonRate
                   ? `\nHändelser: ${session.oneSamplePoissonRate.eventCount}\nExponering: ${formatValue(session.oneSamplePoissonRate.totalExposure)}\nHastighet: ${formatValue(session.oneSamplePoissonRate.observedRate)}\nz: ${formatValue(session.oneSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.oneSamplePoissonRate.pValue, language)}\nGarwood-KI: [${formatValue(session.oneSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.oneSamplePoissonRate.confidenceInterval[1])}]`
-                  : ''
+                  : session.twoSamplePoissonRate
+                    ? `\nHastighetsskillnad: ${formatValue(session.twoSamplePoissonRate.difference)}\nz: ${formatValue(session.twoSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.twoSamplePoissonRate.pValue, language)}\nKI: [${formatValue(session.twoSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.twoSamplePoissonRate.confidenceInterval[1])}]`
+                    : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1585,6 +1638,68 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.twoSamplePoissonRate && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Två Poisson-hastigheter' : 'Two Poisson rates'}
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Tvåsidigt 2-urvals Poisson-test'
+                      : 'Two-sample Poisson rate test'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>Händelser 1 / 2</span>
+                      <strong>
+                        {session.twoSamplePoissonRate.eventCount1} /{' '}
+                        {session.twoSamplePoissonRate.eventCount2}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Exponering 1 / 2</span>
+                      <strong>
+                        {formatValue(session.twoSamplePoissonRate.totalExposure1)} /{' '}
+                        {formatValue(session.twoSamplePoissonRate.totalExposure2)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Hastighet 1 / 2</span>
+                      <strong>
+                        {formatValue(session.twoSamplePoissonRate.rate1)} /{' '}
+                        {formatValue(session.twoSamplePoissonRate.rate2)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Skillnad</span>
+                      <strong>{formatValue(session.twoSamplePoissonRate.difference)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>z</span>
+                      <strong>{formatValue(session.twoSamplePoissonRate.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.twoSamplePoissonRate.pValue, language)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.twoSamplePoissonRate.alpha)} % KI för hastighetsskillnad: [
+                    {formatValue(session.twoSamplePoissonRate.confidenceInterval[0])},{' '}
+                    {formatValue(session.twoSamplePoissonRate.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.twoSamplePoissonRate.alpha)} ${session.twoSamplePoissonRate.pValue < session.twoSamplePoissonRate.alpha ? 'förkastas H₀; hastigheterna skiljer sig statistiskt signifikant.' : 'kan H₀ inte förkastas; ingen statistiskt signifikant skillnad visas.'}`
+                      : `At α = ${formatValue(session.twoSamplePoissonRate.alpha)} ${session.twoSamplePoissonRate.pValue < session.twoSamplePoissonRate.alpha ? 'reject H₀; the rates differ significantly.' : 'do not reject H₀; no significant difference is shown.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `Oberoende grupper antas. Poolat under H₀: förväntat ${formatValue(session.twoSamplePoissonRate.expectedEvents1)} respektive ${formatValue(session.twoSamplePoissonRate.expectedEvents2)} händelser. Normalapproximationens precision beror på antal händelser.`
+                      : `Independent groups are assumed. Pooled under H₀: expected ${formatValue(session.twoSamplePoissonRate.expectedEvents1)} and ${formatValue(session.twoSamplePoissonRate.expectedEvents2)} events. Normal-approximation accuracy depends on event counts.`}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -1740,6 +1855,17 @@ function App() {
             hypothesizedRate,
             alpha,
           )
+        }}
+      />
+      <TwoSamplePoissonRateDialog
+        open={twoSamplePoissonDialogOpen}
+        initialColumn1={numericColumns[0]?.id ?? ''}
+        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setTwoSamplePoissonDialogOpen}
+        onSubmit={(columnId1, exposure1, columnId2, exposure2, alpha) => {
+          void runTwoSamplePoissonAnalysis(columnId1, exposure1, columnId2, exposure2, alpha)
         }}
       />
       {toast && (

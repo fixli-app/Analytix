@@ -34,6 +34,7 @@ npm run build
 - Statistics menu: two-proportion Z-test for two independent binary columns, using pooled null standard error and a Newcombe-Wilson confidence interval.
 - Statistics menu: Pearson correlation and sample covariance, with two-sided t inference and Fisher-z confidence interval.
 - Statistics menu: one-sample Poisson event-rate score test with exposure input, normal-approximation p-value, and Garwood confidence interval.
+- Statistics menu: two-sample Poisson rate test with separate exposures, pooled null-rate variance, and a confidence interval for the rate difference.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -52,9 +53,10 @@ npm run build
 | Two-sided two-proportion Z-test                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/twoProportions.test.ts`; 26/40 vs 18/40; pooled z and Newcombe-Wilson interval fixture; an external reference comparison remains                                  |
 | Pearson correlation/covariance                                                                        | Implemented; not independently reference-verified | `src/stats/__tests__/correlation.test.ts`; five-pair fixture with r=−0.8; t p-value and Fisher-z interval fixture; an external reference comparison remains                            |
 | One-sample Poisson event rate                                                                         | Implemented; not independently reference-verified | `src/stats/__tests__/oneSamplePoissonRate.test.ts`; counts `[0, 1, 2]`, exposure 1, λ₀=0.5; score p-value and Garwood interval fixture; an external reference comparison remains       |
+| Two-sample Poisson event rates                                                                        | Implemented; not independently reference-verified | `src/stats/__tests__/twoSamplePoissonRate.test.ts`; 4/4 vs 12/4 events/exposure; pooled z and rate-difference interval fixture; an external reference comparison remains               |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
-The forty-nine current tests cover descriptive summaries, standardization, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-sample Poisson rates, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
+The fifty-two current tests cover descriptive summaries, standardization, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-/two-sample Poisson rates, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 ## Architecture
 
