@@ -24,6 +24,7 @@ interface WorkbookState extends WorkbookSnapshot {
   addRow: () => void
   insertRow: (rowIndex: number) => void
   addColumn: () => void
+  appendNumericColumn: (name: string, values: readonly (string | null)[]) => string
   deleteRow: (rowIndex: number) => void
   deleteColumn: (columnId: string) => boolean
   renameColumn: (columnId: string, name: string) => void
@@ -129,6 +130,21 @@ export const useWorkbookStore = create<WorkbookState>()(
           row[id] = ''
         })
       }),
+    appendNumericColumn: (name, values) => {
+      let columnId = ''
+      set((state) => {
+        state.past.push(snapshot(state))
+        state.future = []
+        let nextNumber = state.columns.length + 1
+        while (state.columns.some((column) => column.id === `C${nextNumber}`)) nextNumber += 1
+        columnId = `C${nextNumber}`
+        state.columns.push({ id: columnId, name, type: 'numeric' })
+        state.rows.forEach((row, index) => {
+          row[columnId] = values[index] ?? ''
+        })
+      })
+      return columnId
+    },
     deleteRow: (rowIndex) =>
       set((state) => {
         if (rowIndex < 0 || rowIndex >= state.rows.length) return
@@ -186,10 +202,12 @@ export const useWorkbookStore = create<WorkbookState>()(
         state.rows.sort((left, right) => {
           const a = left[columnId] ?? ''
           const b = right[columnId] ?? ''
+          const aMissing = a.trim() === ''
+          const bMissing = b.trim() === ''
+          if (aMissing !== bMissing) return aMissing ? 1 : -1
+          if (aMissing) return 0
           const comparison =
-            column?.type === 'numeric'
-              ? (Number(a) || 0) - (Number(b) || 0)
-              : a.localeCompare(b, 'sv')
+            column?.type === 'numeric' ? Number(a) - Number(b) : a.localeCompare(b, 'sv')
           return direction === 'ascending' ? comparison : -comparison
         })
       }),

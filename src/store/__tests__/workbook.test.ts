@@ -74,4 +74,28 @@ describe('workbook history and editing', () => {
     useWorkbookStore.getState().sortByColumn('C1', 'descending')
     expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(['10', '2', '1'])
   })
+
+  it('keeps missing numeric values last in either sort direction', () => {
+    for (const direction of ['ascending', 'descending'] as const) {
+      useWorkbookStore.setState({ rows: [{ C1: '2' }, { C1: '' }, { C1: '10' }] })
+      useWorkbookStore.getState().sortByColumn('C1', direction)
+      expect(useWorkbookStore.getState().rows.map((row) => row.C1)).toEqual(
+        direction === 'ascending' ? ['2', '10', ''] : ['10', '2', ''],
+      )
+    }
+  })
+
+  it('appends a derived numeric column as one undoable change', () => {
+    const columnId = useWorkbookStore.getState().appendNumericColumn('Z(Value)', ['-1', '1'])
+    expect(columnId).toBe('C2')
+    expect(useWorkbookStore.getState().columns[1]).toEqual({
+      id: 'C2',
+      name: 'Z(Value)',
+      type: 'numeric',
+    })
+    expect(useWorkbookStore.getState().rows[0][columnId]).toBe('-1')
+
+    useWorkbookStore.getState().undo()
+    expect(useWorkbookStore.getState().columns).toHaveLength(1)
+  })
 })

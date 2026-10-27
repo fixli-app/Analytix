@@ -71,7 +71,7 @@ const menuContent: Record<string, string[]> = {
     'addRow',
     'addColumn',
   ],
-  calculate: ['Beskrivande statistik'],
+  calculate: ['Beskrivande statistik', 'standardizeColumn'],
   statistics: ['Beskrivande statistik', 'Fler analyser kommer i kommande faser'],
   graphs: ['Diagram kommer i kommande faser'],
   editor: ['Makron kommer i kommande faser'],
@@ -87,6 +87,7 @@ const actionLabelKeys: Record<string, string> = {
   replaceMissing: 'replaceMissing',
   addRow: 'addRow',
   addColumn: 'addColumn',
+  standardizeColumn: 'standardizeColumn',
 }
 
 interface SessionResult {
@@ -191,6 +192,7 @@ function App() {
   const pasteCells = useWorkbookStore((state) => state.pasteCells)
   const insertRow = useWorkbookStore((state) => state.insertRow)
   const addColumn = useWorkbookStore((state) => state.addColumn)
+  const appendNumericColumn = useWorkbookStore((state) => state.appendNumericColumn)
   const deleteRow = useWorkbookStore((state) => state.deleteRow)
   const deleteColumn = useWorkbookStore((state) => state.deleteColumn)
   const replaceMissing = useWorkbookStore((state) => state.replaceMissing)
@@ -329,6 +331,29 @@ function App() {
     }
   }
 
+  async function standardizeSelectedColumn() {
+    const column = columns.find((item) => item.id === targetColumn)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn för standardisering.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const result = await statsWorker.standardize(values)
+      const name = `Z(${column.name})`
+      const newColumnId = appendNumericColumn(
+        name,
+        result.values.map((value) => (value === null ? '' : String(value))),
+      )
+      setToast(`${name} lagrad i ${newColumnId}.`)
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Kolumnen kunde inte standardiseras.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -361,6 +386,7 @@ function App() {
     else if (action === 'Öppna projekt…') projectInputRef.current?.click()
     else if (action === 'Spara projekt') saveProject()
     else if (action === 'Beskrivande statistik') void runAnalysis()
+    else if (action === 'standardizeColumn') void standardizeSelectedColumn()
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
