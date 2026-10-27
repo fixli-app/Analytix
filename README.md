@@ -38,6 +38,7 @@ npm run build
 - Statistics menu: one-sample Poisson event-rate score test with exposure input, normal-approximation p-value, and Garwood confidence interval.
 - Statistics menu: two-sample Poisson rate test with separate exposures, pooled null-rate variance, and a confidence interval for the rate difference.
 - Statistics menu: compare two variances with F, Bartlett, and median-centered Levene tests; normality assumptions for F/Bartlett are disclosed.
+- Statistics menu: two-sided Kolmogorov-Smirnov test against a fully specified normal distribution; μ and σ are supplied by the user.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -60,9 +61,10 @@ npm run build
 | One-sample Poisson event rate                                                                         | Implemented; not independently reference-verified | `src/stats/__tests__/oneSamplePoissonRate.test.ts`; counts `[0, 1, 2]`, exposure 1, λ₀=0.5; score p-value and Garwood interval fixture; an external reference comparison remains       |
 | Two-sample Poisson event rates                                                                        | Implemented; not independently reference-verified | `src/stats/__tests__/twoSamplePoissonRate.test.ts`; 4/4 vs 12/4 events/exposure; pooled z and rate-difference interval fixture; an external reference comparison remains               |
 | Two-sample variance comparisons (F, Bartlett, Levene)                                                 | Implemented; not independently reference-verified | `src/stats/__tests__/compareVariances.test.ts`; equal sample variance fixture and explicit normality caveat; external reference comparison remains                                     |
+| Kolmogorov-Smirnov vs fully specified normal                                                          | Implemented; not independently reference-verified | `src/stats/__tests__/normalKs.test.ts`; fixed μ/σ fixture; estimated-parameter Lilliefors correction is not implemented                                                                |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
-The sixty-one current tests cover descriptive summaries, standardization, one-/two-sample Z, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-/two-sample Poisson rates, F/Bartlett/Levene comparisons, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
+The sixty-four current tests cover descriptive summaries, standardization, specified-normal KS, one-/two-sample Z, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-/two-sample Poisson rates, F/Bartlett/Levene comparisons, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 ## Architecture
 
@@ -77,4 +79,4 @@ The app uses React 18, strict TypeScript, Vite, Tailwind CSS, TanStack Virtual, 
 
 ## Limitations
 
-This is an initial working slice, not a complete statistical package. Multiple worksheets, stacking/splitting/merging/subsetting/filtering/type conversion/ranking/random sampling, analysis dialogs, inference/regression/quality/DOE methods, charts, report builder, macros, accessibility audit, offline PWA, and full help content remain unfinished. The 500,000-row performance goal has not been benchmarked. Descriptive statistics has a hand-calculated test fixture but no independent reference verification; results are visibly marked unverified in the session.
+This is an initial working slice, not a complete statistical package. The KS implementation only supports a fully specified normal distribution; estimated-parameter Lilliefors correction remains unfinished. Multiple worksheets, stacking/splitting/merging/subsetting/filtering/type conversion/ranking/random sampling, remaining analysis dialogs, regression/quality/DOE methods, charts, report builder, macros, accessibility audit, offline PWA, and full help content remain unfinished. The 500,000-row performance goal has not been benchmarked. Statistical fixtures are hand-calculated and not yet independently reference-verified; results are visibly marked unverified in the session.

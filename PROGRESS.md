@@ -29,6 +29,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 - [x] Statistik-delmodul: tvåsidigt 2-proportion Z-test med pooled null-standardfel, förväntade antal och Newcombe-Wilson-KI för två oberoende binära grupper. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [x] Statistik-delmodul: Pearson-korrelation, sample-kovarians, tvåsidigt t-test och Fisher-z-KI med complete-case-par. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [x] Statistik-delmodul: tvågrupps F-test, Bartlett och medianbaserat Levene-test. Status: klar med fixture- och browserflödestester; F/Bartletts normalitetsantagande exponeras och oberoende referensverifiering återstår.
+- [x] Statistik-delmodul: tvåsidigt Kolmogorov-Smirnov mot fullt specificerad normalfördelning. Status: klar med fixture- och browserflödestester; μ/σ måste anges i förväg, Lilliefors-korrigering för skattade parametrar återstår; extern referensverifiering återstår.
 - [x] Statistik-delmodul: 1-urvals Poisson-hastighetstest med exponering, score-Z och Garwood-KI. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [x] Statistik-delmodul: tvåsidigt 2-urvals Poisson-hastighetstest för oberoende grupper med separata exponeringar, poolad H₀-varians och KI för hastighetsskillnaden. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [ ] Tabeller: korstabell och chi-två; chi-två goodness-of-fit; beskrivande statistik för tabeller; Fisher exakt test. Status: ej påbörjad.
@@ -91,6 +92,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (61 tester) och `npm run build` passerar.
-- Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema, 390 px mobilvy, sökfilter, en-/två-urvals Z/t-test, proportionstest, korrelation och Poisson-hastighet kontrollerade.
-- Nästa steg: fortsätt Fas 1 med normalitetstester, chi-två och fler grundläggande analyser. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (64 tester) och `npm run build` passerar.
+- Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema, 390 px mobilvy, sökfilter, t-/Z-/proportionstest, korrelation, variansjämförelser och Poisson-hastighet kontrollerade.
+- Nästa steg: fortsätt Fas 1 med chi-två, ytterligare normalitetstest och fler grundläggande analyser. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.

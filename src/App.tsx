@@ -56,6 +56,7 @@ import type { TwoProportionsResult } from './stats/twoProportions'
 import type { CorrelationResult } from './stats/correlation'
 import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
 import type { OneSampleZResult } from './stats/oneSampleZ'
+import type { NormalKsResult } from './stats/normalKs'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -67,6 +68,7 @@ import { TwoProportionsDialog } from './dialogs/TwoProportionsDialog'
 import { CorrelationDialog } from './dialogs/CorrelationDialog'
 import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog'
 import { OneSampleZDialog } from './dialogs/OneSampleZDialog'
+import { NormalKSDialog } from './dialogs/NormalKSDialog'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -108,6 +110,7 @@ const menuContent: Record<string, string[]> = {
     'oneSamplePoissonRate',
     'twoSamplePoissonRate',
     'compareVariances',
+    'normalKS',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -137,6 +140,7 @@ const actionLabelKeys: Record<string, string> = {
   oneSamplePoissonRate: 'oneSamplePoissonRate',
   twoSamplePoissonRate: 'twoSamplePoissonRate',
   compareVariances: 'compareVariances',
+  normalKS: 'normalKS',
 }
 
 interface SessionResult {
@@ -145,6 +149,7 @@ interface SessionResult {
   summary: DescriptiveSummary
   oneSampleT?: OneSampleTResult
   oneSampleZ?: OneSampleZResult
+  normalKS?: NormalKsResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -275,6 +280,7 @@ function App() {
   const [session, setSession] = useState<SessionResult | null>(null)
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
   const [oneSampleZDialogOpen, setOneSampleZDialogOpen] = useState(false)
+  const [normalKSDialogOpen, setNormalKSDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -529,6 +535,33 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Z-testet kunde inte genomföras.')
+    }
+  }
+
+  async function runNormalKSAnalysis(columnId: string, mean: number, standardDeviation: number) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn för Kolmogorov-Smirnov-testet.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.normalKolmogorovSmirnov(values, mean, standardDeviation),
+        statsWorker.describe(values),
+      ])
+      setSession({
+        title: 'Kolmogorov-Smirnov mot normal',
+        columnName: column.name,
+        summary,
+        normalKS: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Normalitetstestet kunde inte genomföras.')
     }
   }
 
@@ -849,6 +882,7 @@ function App() {
     else if (action === 'oneSampleT') setOneSampleTDialogOpen(true)
     else if (action === 'oneSampleZ') setOneSampleZDialogOpen(true)
     else if (action === 'twoSampleZ') setTwoSampleZDialogOpen(true)
+    else if (action === 'normalKS') setNormalKSDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -965,7 +999,9 @@ function App() {
                         ? `\nHastighetsskillnad: ${formatValue(session.twoSamplePoissonRate.difference)}\nz: ${formatValue(session.twoSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.twoSamplePoissonRate.pValue, language)}\nKI: [${formatValue(session.twoSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.twoSamplePoissonRate.confidenceInterval[1])}]`
                         : session.varianceComparison
                           ? `\nF: ${formatValue(session.varianceComparison.fStatistic)}\nF p-värde: ${formatPValue(session.varianceComparison.fPValue, language)}\nBartlett p-värde: ${formatPValue(session.varianceComparison.bartlettPValue, language)}\nLevene p-värde: ${formatPValue(session.varianceComparison.levenePValue, language)}`
-                          : ''
+                          : session.normalKS
+                            ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                            : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1987,6 +2023,59 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.normalKS && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Kolmogorov-Smirnov-resultat' : 'Kolmogorov-Smirnov result'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Kolmogorov-Smirnov mot N(μ, σ)'
+                      : 'Kolmogorov-Smirnov vs N(μ, σ)'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>Kompletta värden</span>
+                      <strong>{session.normalKS.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>D</span>
+                      <strong>{formatValue(session.normalKS.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>D+</span>
+                      <strong>{formatValue(session.normalKS.dPlus)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>D−</span>
+                      <strong>{formatValue(session.normalKS.dMinus)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.normalKS.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Specificerad μ / σ</span>
+                      <strong>
+                        {formatValue(session.normalKS.hypothesizedMean)} /{' '}
+                        {formatValue(session.normalKS.hypothesizedStandardDeviation)}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `${session.normalKS.pValue < 0.05 ? 'Förkasta' : 'Förkasta inte'} H₀ att data följer den specificerade normalfördelningen (α = 0,05).`
+                      : `${session.normalKS.pValue < 0.05 ? 'Reject' : 'Do not reject'} H₀ that data follow the specified normal distribution (α = 0.05).`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'P-värdet gäller fullt specificerade μ och σ. Parametrar skattade från samma urval kräver Lilliefors-korrigering och stöds inte här.'
+                      : 'The p-value assumes fully specified μ and σ. Parameters estimated from this sample require a Lilliefors correction, which is not used here.'}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -2148,6 +2237,16 @@ function App() {
         onOpenChange={setCorrelationDialogOpen}
         onSubmit={(columnId1, columnId2, alpha) => {
           void runCorrelationAnalysis(columnId1, columnId2, alpha)
+        }}
+      />
+      <NormalKSDialog
+        open={normalKSDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setNormalKSDialogOpen}
+        onSubmit={(columnId, mean, standardDeviation) => {
+          void runNormalKSAnalysis(columnId, mean, standardDeviation)
         }}
       />
       <CompareVariancesDialog

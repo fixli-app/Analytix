@@ -6,6 +6,7 @@ import { oneSampleT } from '../stats/oneSampleT'
 import { oneProportion } from '../stats/oneProportion'
 import { oneSamplePoissonRate } from '../stats/oneSamplePoissonRate'
 import { oneSampleZ } from '../stats/oneSampleZ'
+import { normalKolmogorovSmirnov } from '../stats/normalKs'
 import { twoSampleZ } from '../stats/twoSampleZ'
 import { pairedT } from '../stats/pairedT'
 import { standardize } from '../stats/transform'
@@ -20,6 +21,7 @@ const api = {
   oneProportion,
   oneSamplePoissonRate,
   oneSampleZ,
+  normalKolmogorovSmirnov,
   twoSampleZ,
   oneSampleT,
   pairedT,
