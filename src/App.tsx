@@ -55,6 +55,7 @@ import type { OneProportionResult } from './stats/oneProportion'
 import type { TwoProportionsResult } from './stats/twoProportions'
 import type { CorrelationResult } from './stats/correlation'
 import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
+import type { OneSampleZResult } from './stats/oneSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
@@ -64,6 +65,7 @@ import { OneProportionDialog } from './dialogs/OneProportionDialog'
 import { TwoProportionsDialog } from './dialogs/TwoProportionsDialog'
 import { CorrelationDialog } from './dialogs/CorrelationDialog'
 import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog'
+import { OneSampleZDialog } from './dialogs/OneSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
 
@@ -94,6 +96,7 @@ const menuContent: Record<string, string[]> = {
   calculate: ['Beskrivande statistik', 'standardizeColumn'],
   statistics: [
     'oneSampleT',
+    'oneSampleZ',
     'twoSampleT',
     'pairedT',
     'oneProportion',
@@ -121,6 +124,7 @@ const actionLabelKeys: Record<string, string> = {
   addColumn: 'addColumn',
   standardizeColumn: 'standardizeColumn',
   oneSampleT: 'oneSampleT',
+  oneSampleZ: 'oneSampleZ',
   twoSampleT: 'twoSampleT',
   pairedT: 'pairedT',
   oneProportion: 'oneProportion',
@@ -136,6 +140,7 @@ interface SessionResult {
   columnName: string
   summary: DescriptiveSummary
   oneSampleT?: OneSampleTResult
+  oneSampleZ?: OneSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
   oneProportion?: OneProportionResult
@@ -264,6 +269,7 @@ function App() {
   const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending')
   const [session, setSession] = useState<SessionResult | null>(null)
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
+  const [oneSampleZDialogOpen, setOneSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
   const [oneProportionDialogOpen, setOneProportionDialogOpen] = useState(false)
@@ -446,6 +452,38 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'T-testet kunde inte genomföras.')
+    }
+  }
+
+  async function runOneSampleZAnalysis(
+    columnId: string,
+    hypothesizedMean: number,
+    knownStandardDeviation: number,
+    alpha: number,
+  ) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn för 1-urvals Z-testet.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.oneSampleZ(values, hypothesizedMean, knownStandardDeviation, alpha),
+        statsWorker.describe(values),
+      ])
+      setSession({
+        title: '1-urvals Z-test',
+        columnName: column.name,
+        summary,
+        oneSampleZ: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Z-testet kunde inte genomföras.')
     }
   }
 
@@ -764,6 +802,7 @@ function App() {
     else if (action === 'Beskrivande statistik') void runAnalysis()
     else if (action === 'standardizeColumn') void standardizeSelectedColumn()
     else if (action === 'oneSampleT') setOneSampleTDialogOpen(true)
+    else if (action === 'oneSampleZ') setOneSampleZDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -860,23 +899,25 @@ function App() {
     const { summary } = session
     const testResult = session.oneSampleT
       ? `\nt(${session.oneSampleT.degreesOfFreedom}): ${formatValue(session.oneSampleT.statistic)}\ndf: ${session.oneSampleT.degreesOfFreedom}\np-värde: ${formatPValue(session.oneSampleT.pValue, language)}\nKI: [${formatValue(session.oneSampleT.confidenceInterval[0])}, ${formatValue(session.oneSampleT.confidenceInterval[1])}]`
-      : session.twoSampleT
-        ? `\nt(${formatValue(session.twoSampleT.degreesOfFreedom)}): ${formatValue(session.twoSampleT.statistic)}\nMedelskillnad: ${formatValue(session.twoSampleT.difference)}\np-värde: ${formatPValue(session.twoSampleT.pValue, language)}\nKI: [${formatValue(session.twoSampleT.confidenceInterval[0])}, ${formatValue(session.twoSampleT.confidenceInterval[1])}]`
-        : session.pairedT
-          ? `\nt(${session.pairedT.degreesOfFreedom}): ${formatValue(session.pairedT.statistic)}\nAntal par: ${session.pairedT.pairCount}\nMedelskillnad: ${formatValue(session.pairedT.meanDifference)}\np-värde: ${formatPValue(session.pairedT.pValue, language)}\nKI: [${formatValue(session.pairedT.confidenceInterval[0])}, ${formatValue(session.pairedT.confidenceInterval[1])}]`
-          : session.oneProportion
-            ? `\nz: ${formatValue(session.oneProportion.statistic)}\nAndel: ${formatValue(session.oneProportion.observedProportion)}\np-värde: ${formatPValue(session.oneProportion.pValue, language)}\nKI: [${formatValue(session.oneProportion.confidenceInterval[0])}, ${formatValue(session.oneProportion.confidenceInterval[1])}]`
-            : session.twoProportions
-              ? `\nz: ${formatValue(session.twoProportions.statistic)}\nAndelsskillnad: ${formatValue(session.twoProportions.difference)}\np-värde: ${formatPValue(session.twoProportions.pValue, language)}\nKI: [${formatValue(session.twoProportions.confidenceInterval[0])}, ${formatValue(session.twoProportions.confidenceInterval[1])}]`
-              : session.correlation
-                ? `\nr: ${formatValue(session.correlation.correlation)}\nKovarians: ${formatValue(session.correlation.covariance)}\nt: ${formatValue(session.correlation.statistic)}\np-värde: ${formatPValue(session.correlation.pValue, language)}\nKI: [${formatValue(session.correlation.confidenceInterval[0])}, ${formatValue(session.correlation.confidenceInterval[1])}]`
-                : session.oneSamplePoissonRate
-                  ? `\nHändelser: ${session.oneSamplePoissonRate.eventCount}\nExponering: ${formatValue(session.oneSamplePoissonRate.totalExposure)}\nHastighet: ${formatValue(session.oneSamplePoissonRate.observedRate)}\nz: ${formatValue(session.oneSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.oneSamplePoissonRate.pValue, language)}\nGarwood-KI: [${formatValue(session.oneSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.oneSamplePoissonRate.confidenceInterval[1])}]`
-                  : session.twoSamplePoissonRate
-                    ? `\nHastighetsskillnad: ${formatValue(session.twoSamplePoissonRate.difference)}\nz: ${formatValue(session.twoSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.twoSamplePoissonRate.pValue, language)}\nKI: [${formatValue(session.twoSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.twoSamplePoissonRate.confidenceInterval[1])}]`
-                    : session.varianceComparison
-                      ? `\nF: ${formatValue(session.varianceComparison.fStatistic)}\nF p-värde: ${formatPValue(session.varianceComparison.fPValue, language)}\nBartlett p-värde: ${formatPValue(session.varianceComparison.bartlettPValue, language)}\nLevene p-värde: ${formatPValue(session.varianceComparison.levenePValue, language)}`
-                      : ''
+      : session.oneSampleZ
+        ? `\nz: ${formatValue(session.oneSampleZ.statistic)}\nσ: ${formatValue(session.oneSampleZ.knownStandardDeviation)}\np-värde: ${formatPValue(session.oneSampleZ.pValue, language)}\nKI: [${formatValue(session.oneSampleZ.confidenceInterval[0])}, ${formatValue(session.oneSampleZ.confidenceInterval[1])}]`
+        : session.twoSampleT
+          ? `\nt(${formatValue(session.twoSampleT.degreesOfFreedom)}): ${formatValue(session.twoSampleT.statistic)}\nMedelskillnad: ${formatValue(session.twoSampleT.difference)}\np-värde: ${formatPValue(session.twoSampleT.pValue, language)}\nKI: [${formatValue(session.twoSampleT.confidenceInterval[0])}, ${formatValue(session.twoSampleT.confidenceInterval[1])}]`
+          : session.pairedT
+            ? `\nt(${session.pairedT.degreesOfFreedom}): ${formatValue(session.pairedT.statistic)}\nAntal par: ${session.pairedT.pairCount}\nMedelskillnad: ${formatValue(session.pairedT.meanDifference)}\np-värde: ${formatPValue(session.pairedT.pValue, language)}\nKI: [${formatValue(session.pairedT.confidenceInterval[0])}, ${formatValue(session.pairedT.confidenceInterval[1])}]`
+            : session.oneProportion
+              ? `\nz: ${formatValue(session.oneProportion.statistic)}\nAndel: ${formatValue(session.oneProportion.observedProportion)}\np-värde: ${formatPValue(session.oneProportion.pValue, language)}\nKI: [${formatValue(session.oneProportion.confidenceInterval[0])}, ${formatValue(session.oneProportion.confidenceInterval[1])}]`
+              : session.twoProportions
+                ? `\nz: ${formatValue(session.twoProportions.statistic)}\nAndelsskillnad: ${formatValue(session.twoProportions.difference)}\np-värde: ${formatPValue(session.twoProportions.pValue, language)}\nKI: [${formatValue(session.twoProportions.confidenceInterval[0])}, ${formatValue(session.twoProportions.confidenceInterval[1])}]`
+                : session.correlation
+                  ? `\nr: ${formatValue(session.correlation.correlation)}\nKovarians: ${formatValue(session.correlation.covariance)}\nt: ${formatValue(session.correlation.statistic)}\np-värde: ${formatPValue(session.correlation.pValue, language)}\nKI: [${formatValue(session.correlation.confidenceInterval[0])}, ${formatValue(session.correlation.confidenceInterval[1])}]`
+                  : session.oneSamplePoissonRate
+                    ? `\nHändelser: ${session.oneSamplePoissonRate.eventCount}\nExponering: ${formatValue(session.oneSamplePoissonRate.totalExposure)}\nHastighet: ${formatValue(session.oneSamplePoissonRate.observedRate)}\nz: ${formatValue(session.oneSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.oneSamplePoissonRate.pValue, language)}\nGarwood-KI: [${formatValue(session.oneSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.oneSamplePoissonRate.confidenceInterval[1])}]`
+                    : session.twoSamplePoissonRate
+                      ? `\nHastighetsskillnad: ${formatValue(session.twoSamplePoissonRate.difference)}\nz: ${formatValue(session.twoSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.twoSamplePoissonRate.pValue, language)}\nKI: [${formatValue(session.twoSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.twoSamplePoissonRate.confidenceInterval[1])}]`
+                      : session.varianceComparison
+                        ? `\nF: ${formatValue(session.varianceComparison.fStatistic)}\nF p-värde: ${formatPValue(session.varianceComparison.fPValue, language)}\nBartlett p-värde: ${formatPValue(session.varianceComparison.bartlettPValue, language)}\nLevene p-värde: ${formatPValue(session.varianceComparison.levenePValue, language)}`
+                        : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1360,6 +1401,53 @@ function App() {
                     {language === 'sv'
                       ? 'Antaganden: oberoende observationer och ungefär normal population vid små urval; antagandena har inte testats.'
                       : 'Assumptions: independent observations and an approximately normal population for small samples; assumptions were not tested.'}
+                  </p>
+                </section>
+              )}
+              {session.oneSampleZ && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? '1-urvals Z-testresultat' : 'One-sample Z-test result'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Tvåsidigt 1-urvals Z-test'
+                      : 'Two-sided one-sample Z-test'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>z</span>
+                      <strong>{formatValue(session.oneSampleZ.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.oneSampleZ.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.oneSampleZ.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Känd σ</span>
+                      <strong>{formatValue(session.oneSampleZ.knownStandardDeviation)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.oneSampleZ.alpha)} % KI: [
+                    {formatValue(session.oneSampleZ.confidenceInterval[0])},{' '}
+                    {formatValue(session.oneSampleZ.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.oneSampleZ.alpha)} ${session.oneSampleZ.pValue < session.oneSampleZ.alpha ? 'förkastas H₀; resultatet är statistiskt signifikant.' : 'kan H₀ inte förkastas; resultatet är inte statistiskt signifikant.'}`
+                      : `At α = ${formatValue(session.oneSampleZ.alpha)} ${session.oneSampleZ.pValue < session.oneSampleZ.alpha ? 'reject H₀; the result is statistically significant.' : 'do not reject H₀; the result is not statistically significant.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Populationsstandardavvikelsen anges som känd. Oberoende och normalitet har inte testats.'
+                      : 'The population standard deviation is supplied as known. Independence and normality were not tested.'}
                   </p>
                 </section>
               )}
@@ -1877,6 +1965,16 @@ function App() {
         onOpenChange={setOneSampleTDialogOpen}
         onSubmit={(columnId, hypothesizedMean, alpha) => {
           void runOneSampleTAnalysis(columnId, hypothesizedMean, alpha)
+        }}
+      />
+      <OneSampleZDialog
+        open={oneSampleZDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setOneSampleZDialogOpen}
+        onSubmit={(columnId, mean, standardDeviation, alpha) => {
+          void runOneSampleZAnalysis(columnId, mean, standardDeviation, alpha)
         }}
       />
       <TwoSampleTDialog

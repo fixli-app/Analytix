@@ -5,6 +5,7 @@ import { compareVariances } from '../stats/compareVariances'
 import { oneSampleT } from '../stats/oneSampleT'
 import { oneProportion } from '../stats/oneProportion'
 import { oneSamplePoissonRate } from '../stats/oneSamplePoissonRate'
+import { oneSampleZ } from '../stats/oneSampleZ'
 import { pairedT } from '../stats/pairedT'
 import { standardize } from '../stats/transform'
 import { twoSampleT } from '../stats/twoSampleT'
@@ -17,6 +18,7 @@ const api = {
   compareVariances,
   oneProportion,
   oneSamplePoissonRate,
+  oneSampleZ,
   oneSampleT,
   pairedT,
   standardize,
