@@ -477,7 +477,7 @@ function App() {
   async function copySession() {
     if (!session) return
     const { summary } = session
-    const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}\nEj verifierad analys.`
+    const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
   }
@@ -892,6 +892,26 @@ function App() {
                   <strong>{formatValue(session.summary.standardDeviation)}</strong>
                 </div>
                 <div className="stat-cell">
+                  <span>Varians</span>
+                  <strong>{formatValue(session.summary.variance)}</strong>
+                </div>
+                <div className="stat-cell">
+                  <span>Standardfel</span>
+                  <strong>{formatValue(session.summary.standardError)}</strong>
+                </div>
+                <div className="stat-cell">
+                  <span>Q1 · R-7</span>
+                  <strong>{formatValue(session.summary.firstQuartile)}</strong>
+                </div>
+                <div className="stat-cell">
+                  <span>Q3 · R-7</span>
+                  <strong>{formatValue(session.summary.thirdQuartile)}</strong>
+                </div>
+                <div className="stat-cell">
+                  <span>Variationsbredd</span>
+                  <strong>{formatValue(session.summary.range)}</strong>
+                </div>
+                <div className="stat-cell">
                   <span>Minimum</span>
                   <strong>{formatValue(session.summary.minimum)}</strong>
                 </div>
@@ -901,8 +921,8 @@ function App() {
                 </div>
               </div>
               <p className="session-caption">
-                Stickprovsstandardavvikelse, beräknad med Welfords algoritm. Saknade värden
-                uteslöts.
+                Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
+                värden uteslöts.
               </p>
               <p className="session-caption">
                 Beskrivande statistik sammanfattar fördelningen; ingen hypotesprövning har utförts.

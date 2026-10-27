@@ -22,7 +22,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 - [ ] Statistik > Grundläggande: grafisk sammanfattning; beskrivande statistik; 1-urvals Z/t; 2-urvals t; parat t; 1/2 proportioner; 1/2-urvals Poisson-hastighet; jämförelse av två varianser, Bartlett, Levene; korrelation; kovarians; Anderson-Darling, Ryan-Joiner och Kolmogorov-Smirnov normalitetstest; Poisson goodness-of-fit. Status: ej påbörjad.
 - [ ] Tabeller: korstabell och chi-två; chi-två goodness-of-fit; beskrivande statistik för tabeller; Fisher exakt test. Status: ej påbörjad.
 - [ ] Grafik: histogram (enkelt, anpassad fördelning, flera grupper); boxplot; individuellt värdediagram; punkt-, linje-, stapel- och cirkeldiagram; sannolikhetsdiagram; empirisk CDF; matris- och marginaldiagram; bubbeldiagram; 3D-spridning och yta; kontur-, intervall-, tidsserie- och områdesdiagram; dot plot; violin. Status: ej påbörjad.
-- [x] Delmängd av beskrivande statistik: antal, medelvärde, median, stickprovsstandardavvikelse, minimum och maximum. Status: klar; handberäknat fixture `[1, 2, 3, 4]` testas med tolerans, men oberoende NIST/R/SciPy-verifiering återstår. Övriga beskrivande mått/analyser återstår.
+- [x] Delmängd av beskrivande statistik: antal, medelvärde, median, stickprovsstandardavvikelse, varians, standardfel, R-7-kvartiler, variationsbredd, minimum och maximum. Status: klar; handberäknat fixture `[1, 2, 3, 4]` testas med tolerans, men oberoende NIST/R/SciPy-verifiering återstår. Övriga beskrivande mått/analyser återstår.
 
 ## Fas 2: Hypotesprövning och icke-parametriskt
 

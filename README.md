@@ -29,16 +29,16 @@ npm run build
 - Calculate menu: worker-backed sample z-score standardization, stored in a new undoable numeric column; missing observations remain missing.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
-- Worker-backed descriptive summary: count, mean, median, sample standard deviation, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
+- Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
 - Session result panel with an explicit unverified label, copy, and plain-text export.
 
 ## Verification status
 
-| Analysis                                                          | Status                                            | Evidence                                                                                                                                                                             |
-| ----------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Descriptive summary subset (n, mean, median, sample SD, min, max) | Implemented; not independently reference-verified | `src/stats/__tests__/descriptive.test.ts`; hand-calculated fixture `[1, 2, 3, 4]`; sample SD tolerance `1e-12` decimal places. An external NIST/R/SciPy reference comparison remains |
-| Sample z-score standardization                                    | Implemented; not independently reference-verified | `src/stats/__tests__/transform.test.ts`; hand-calculated fixture `[1, 2, 3] -> [-1, 0, 1]`; an external reference comparison remains                                                 |
-| Other requested statistical analyses                              | Not started                                       | No implementation or reference fixture yet                                                                                                                                           |
+| Analysis                                                                                              | Status                                            | Evidence                                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Descriptive summary subset (n, mean, median, sample SD, variance, SE, R-7 quartiles, range, min, max) | Implemented; not independently reference-verified | `src/stats/__tests__/descriptive.test.ts`; hand-calculated fixture `[1, 2, 3, 4]`; explicit tolerance for sample SD/variance/SE. An external NIST/R/SciPy reference comparison remains |
+| Sample z-score standardization                                                                        | Implemented; not independently reference-verified | `src/stats/__tests__/transform.test.ts`; hand-calculated fixture `[1, 2, 3] -> [-1, 0, 1]`; an external reference comparison remains                                                   |
+| Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
 The twenty-three current tests cover descriptive summaries, standardization, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 

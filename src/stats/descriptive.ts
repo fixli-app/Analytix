@@ -3,6 +3,11 @@ export interface DescriptiveSummary {
   mean: number
   median: number
   standardDeviation: number
+  variance: number
+  standardError: number
+  firstQuartile: number
+  thirdQuartile: number
+  range: number
   minimum: number
   maximum: number
 }
@@ -38,12 +43,27 @@ export function describe(values: readonly (number | null | undefined)[]): Descri
     ordered.length % 2 === 0
       ? ordered[middle - 1] + (ordered[middle] - ordered[middle - 1]) / 2
       : ordered[middle]
+  const quantile = (probability: number) => {
+    const position = (ordered.length - 1) * probability
+    const lowerIndex = Math.floor(position)
+    const upperIndex = Math.ceil(position)
+    return (
+      ordered[lowerIndex] + (ordered[upperIndex] - ordered[lowerIndex]) * (position - lowerIndex)
+    )
+  }
+  const variance = valid.length > 1 ? sumSquaredDifferences / (valid.length - 1) : 0
+  const standardDeviation = Math.sqrt(variance)
 
   return {
     count: valid.length,
     mean: sum / valid.length,
     median,
-    standardDeviation: valid.length > 1 ? Math.sqrt(sumSquaredDifferences / (valid.length - 1)) : 0,
+    standardDeviation,
+    variance,
+    standardError: standardDeviation / Math.sqrt(valid.length),
+    firstQuartile: quantile(0.25),
+    thirdQuartile: quantile(0.75),
+    range: ordered[ordered.length - 1] - ordered[0],
     minimum: ordered[0],
     maximum: ordered[ordered.length - 1],
   }
