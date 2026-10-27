@@ -32,6 +32,7 @@ npm run build
 - Statistics menu: paired t-test based on row-aligned observations, with pairwise missing-data handling, α, confidence interval, conclusion, and explicit untested assumptions.
 - Statistics menu: one-proportion Z-test for binary 0/1 columns, with normal-approximation expected counts and a Wilson score confidence interval.
 - Statistics menu: two-proportion Z-test for two independent binary columns, using pooled null standard error and a Newcombe-Wilson confidence interval.
+- Statistics menu: Pearson correlation and sample covariance, with two-sided t inference and Fisher-z confidence interval.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -48,9 +49,10 @@ npm run build
 | Paired two-sided t-test                                                                               | Implemented; not independently reference-verified | `src/stats/__tests__/pairedT.test.ts`; within-row difference fixture; missing pairs omitted; an external reference comparison remains                                                  |
 | Two-sided one-proportion Z-test                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/oneProportion.test.ts`; 26/40 successes vs p₀=0.5; Wilson interval and p-value fixture; an external reference comparison remains                                  |
 | Two-sided two-proportion Z-test                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/twoProportions.test.ts`; 26/40 vs 18/40; pooled z and Newcombe-Wilson interval fixture; an external reference comparison remains                                  |
+| Pearson correlation/covariance                                                                        | Implemented; not independently reference-verified | `src/stats/__tests__/correlation.test.ts`; five-pair fixture with r=−0.8; t p-value and Fisher-z interval fixture; an external reference comparison remains                            |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
-The forty-two current tests cover descriptive summaries, standardization, one-/two-proportion tests, one-/two-sample and paired t-tests, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
+The forty-six current tests cover descriptive summaries, standardization, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 ## Architecture
 

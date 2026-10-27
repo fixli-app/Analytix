@@ -53,11 +53,13 @@ import type { TwoSampleTResult } from './stats/twoSampleT'
 import type { PairedTResult } from './stats/pairedT'
 import type { OneProportionResult } from './stats/oneProportion'
 import type { TwoProportionsResult } from './stats/twoProportions'
+import type { CorrelationResult } from './stats/correlation'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
 import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
 import { PairedTDialog } from './dialogs/PairedTDialog'
 import { OneProportionDialog } from './dialogs/OneProportionDialog'
 import { TwoProportionsDialog } from './dialogs/TwoProportionsDialog'
+import { CorrelationDialog } from './dialogs/CorrelationDialog'
 
 const menuKeys = [
   'file',
@@ -90,6 +92,7 @@ const menuContent: Record<string, string[]> = {
     'pairedT',
     'oneProportion',
     'twoProportions',
+    'correlation',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -113,6 +116,7 @@ const actionLabelKeys: Record<string, string> = {
   pairedT: 'pairedT',
   oneProportion: 'oneProportion',
   twoProportions: 'twoProportions',
+  correlation: 'correlation',
 }
 
 interface SessionResult {
@@ -124,6 +128,7 @@ interface SessionResult {
   pairedT?: PairedTResult
   oneProportion?: OneProportionResult
   twoProportions?: TwoProportionsResult
+  correlation?: CorrelationResult
   createdAt: Date
 }
 
@@ -248,6 +253,7 @@ function App() {
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
   const [oneProportionDialogOpen, setOneProportionDialogOpen] = useState(false)
   const [twoProportionsDialogOpen, setTwoProportionsDialogOpen] = useState(false)
+  const [correlationDialogOpen, setCorrelationDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -564,6 +570,40 @@ function App() {
     }
   }
 
+  async function runCorrelationAnalysis(columnId1: string, columnId2: string, alpha: number) {
+    const column1 = columns.find((item) => item.id === columnId1)
+    const column2 = columns.find((item) => item.id === columnId2)
+    if (!column1 || !column2 || column1.type !== 'numeric' || column2.type !== 'numeric') {
+      setToast('Välj två numeriska kolumner för korrelationsanalys.')
+      return
+    }
+    const values1 = rows.map((row) => {
+      const raw = row[column1.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const values2 = rows.map((row) => {
+      const raw = row[column2.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.correlation(values1, values2, alpha),
+        statsWorker.describe(values1),
+      ])
+      setSession({
+        title: 'Korrelation och kovarians',
+        columnName: `${column1.name} · ${column2.name}`,
+        summary,
+        correlation: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Korrelationsanalysen kunde inte genomföras.',
+      )
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -602,6 +642,7 @@ function App() {
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
     else if (action === 'twoProportions') setTwoProportionsDialogOpen(true)
+    else if (action === 'correlation') setCorrelationDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -698,7 +739,9 @@ function App() {
             ? `\nz: ${formatValue(session.oneProportion.statistic)}\nAndel: ${formatValue(session.oneProportion.observedProportion)}\np-värde: ${formatPValue(session.oneProportion.pValue, language)}\nKI: [${formatValue(session.oneProportion.confidenceInterval[0])}, ${formatValue(session.oneProportion.confidenceInterval[1])}]`
             : session.twoProportions
               ? `\nz: ${formatValue(session.twoProportions.statistic)}\nAndelsskillnad: ${formatValue(session.twoProportions.difference)}\np-värde: ${formatPValue(session.twoProportions.pValue, language)}\nKI: [${formatValue(session.twoProportions.confidenceInterval[0])}, ${formatValue(session.twoProportions.confidenceInterval[1])}]`
-              : ''
+              : session.correlation
+                ? `\nr: ${formatValue(session.correlation.correlation)}\nKovarians: ${formatValue(session.correlation.covariance)}\nt: ${formatValue(session.correlation.statistic)}\np-värde: ${formatPValue(session.correlation.pValue, language)}\nKI: [${formatValue(session.correlation.confidenceInterval[0])}, ${formatValue(session.correlation.confidenceInterval[1])}]`
+                : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1397,6 +1440,55 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.correlation && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Korrelationsresultat' : 'Correlation results'}
+                >
+                  <h4>{language === 'sv' ? 'Pearsons korrelation' : 'Pearson correlation'}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>Kompletta par</span>
+                      <strong>{session.correlation.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Pearsons r</span>
+                      <strong>{formatValue(session.correlation.correlation)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Kovarians</span>
+                      <strong>{formatValue(session.correlation.covariance)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>t</span>
+                      <strong>{formatValue(session.correlation.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Frihetsgrader</span>
+                      <strong>{session.correlation.degreesOfFreedom}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.correlation.pValue, language)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.correlation.alpha)} % Fisher-z-KI för r: [
+                    {formatValue(session.correlation.confidenceInterval[0])},{' '}
+                    {formatValue(session.correlation.confidenceInterval[1])}]
+                  </p>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.correlation.alpha)} ${session.correlation.pValue < session.correlation.alpha ? 'förkastas H₀: ρ = 0; korrelationen är statistiskt signifikant.' : 'kan H₀: ρ = 0 inte förkastas.'}`
+                      : `At α = ${formatValue(session.correlation.alpha)} ${session.correlation.pValue < session.correlation.alpha ? 'reject H₀: ρ = 0; the correlation is statistically significant.' : 'do not reject H₀: ρ = 0.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Pearson mäter linjärt samband. Oberoende par, linearitet och avsaknad av starka avvikare har inte testats.'
+                      : 'Pearson measures linear association. Independent pairs, linearity, and absence of strong outliers were not tested.'}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -1526,6 +1618,17 @@ function App() {
         onOpenChange={setTwoProportionsDialogOpen}
         onSubmit={(columnId1, columnId2, alpha) => {
           void runTwoProportionsAnalysis(columnId1, columnId2, alpha)
+        }}
+      />
+      <CorrelationDialog
+        open={correlationDialogOpen}
+        initialColumn1={numericColumns[0]?.id ?? ''}
+        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setCorrelationDialogOpen}
+        onSubmit={(columnId1, columnId2, alpha) => {
+          void runCorrelationAnalysis(columnId1, columnId2, alpha)
         }}
       />
       {toast && (

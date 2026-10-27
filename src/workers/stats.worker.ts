@@ -1,5 +1,6 @@
 import { expose } from 'comlink'
 import { describe } from '../stats/descriptive'
+import { correlation } from '../stats/correlation'
 import { oneSampleT } from '../stats/oneSampleT'
 import { oneProportion } from '../stats/oneProportion'
 import { pairedT } from '../stats/pairedT'
@@ -9,6 +10,7 @@ import { twoProportions } from '../stats/twoProportions'
 
 const api = {
   describe,
+  correlation,
   oneProportion,
   oneSampleT,
   pairedT,
