@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+html {
+  min-width: 360px;
+  min-height: 100%;
+}
+body {
+  min-width: 360px;
+  min-height: 100vh;
+}
+#root {
+  min-height: 100vh;
+}
+::selection {
+  background: #e16d4c33;
+}

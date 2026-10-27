@@ -1,0 +1,54 @@
+# StatLab
+
+StatLab is a Swedish-first, local statistical workbench. It is an independent project and does not reproduce another product's branding or interface assets.
+
+## Run locally
+
+Requires Node.js 20.19+ or 22.12+.
+
+```sh
+npm install
+npm run dev
+```
+
+Quality commands:
+
+```sh
+npm run typecheck
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
+
+## Current functionality
+
+- Virtualized editable worksheet with an example production dataset, numeric/text columns, row and column insertion, ascending sort, keyboard undo/redo, and tab/newline paste.
+- CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
+- Swedish default language with an English toggle; light/dark theme.
+- Worker-backed descriptive summary: count, mean, median, sample standard deviation, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
+- Session result panel with an explicit unverified label, copy, and plain-text export.
+
+## Verification status
+
+| Analysis                                                          | Status                                            | Evidence                                                                                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Descriptive summary subset (n, mean, median, sample SD, min, max) | Implemented; not independently reference-verified | `src/stats/__tests__/descriptive.test.ts`; hand-calculated fixture `[1, 2, 3, 4]`; sample SD tolerance `1e-12` decimal places. An external NIST/R/SciPy reference comparison remains |
+| Other requested statistical analyses                              | Not started                                       | No implementation or reference fixture yet                                                                                                                                           |
+
+The seven current tests cover the descriptive summary and workbook undo/paste behavior. This is not the requested 90% statistics coverage target. No analysis is currently marked externally verified.
+
+## Architecture
+
+- `src/stats`: pure statistical functions, independent of React.
+- `src/workers`: Comlink worker entry and client.
+- `src/store`: Zustand + Immer workbook state and history.
+- `src/utils`: IndexedDB project autosave.
+- `src/i18n`: Swedish and English resources.
+- `src/components`, `src/dialogs`, `src/charts`, `src/io`, `src/macros`, and `docs` are reserved for the planned modules as they are implemented.
+
+The app uses React 18, strict TypeScript, Vite, Tailwind CSS, TanStack Virtual, Papa Parse, SheetJS, Plotly, Radix, Vitest/Testing Library, Playwright, ESLint, Prettier, and Husky dependencies. A dependency being installed does not imply its feature is implemented.
+
+## Limitations
+
+This is an initial working slice, not a complete statistical package. Multiple worksheets, advanced data operations, analysis dialogs, inference/regression/quality/DOE methods, charts, report builder, macros, accessibility audit, offline PWA, and full help content remain unfinished. The 500,000-row performance goal has not been benchmarked. Only the documented descriptive-statistics subset is reference-verified; all results are visibly marked unverified in the session.
