@@ -56,6 +56,7 @@ import type { TwoProportionsResult } from './stats/twoProportions'
 import type { CorrelationResult } from './stats/correlation'
 import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
+import type { VarianceComparisonResult } from './stats/compareVariances'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
 import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
 import { PairedTDialog } from './dialogs/PairedTDialog'
@@ -64,6 +65,7 @@ import { TwoProportionsDialog } from './dialogs/TwoProportionsDialog'
 import { CorrelationDialog } from './dialogs/CorrelationDialog'
 import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
+import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
 
 const menuKeys = [
   'file',
@@ -99,6 +101,7 @@ const menuContent: Record<string, string[]> = {
     'correlation',
     'oneSamplePoissonRate',
     'twoSamplePoissonRate',
+    'compareVariances',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -125,6 +128,7 @@ const actionLabelKeys: Record<string, string> = {
   correlation: 'correlation',
   oneSamplePoissonRate: 'oneSamplePoissonRate',
   twoSamplePoissonRate: 'twoSamplePoissonRate',
+  compareVariances: 'compareVariances',
 }
 
 interface SessionResult {
@@ -139,6 +143,7 @@ interface SessionResult {
   correlation?: CorrelationResult
   oneSamplePoissonRate?: OneSamplePoissonRateResult
   twoSamplePoissonRate?: TwoSamplePoissonRateResult
+  varianceComparison?: VarianceComparisonResult
   createdAt: Date
 }
 
@@ -266,6 +271,7 @@ function App() {
   const [correlationDialogOpen, setCorrelationDialogOpen] = useState(false)
   const [oneSamplePoissonDialogOpen, setOneSamplePoissonDialogOpen] = useState(false)
   const [twoSamplePoissonDialogOpen, setTwoSamplePoissonDialogOpen] = useState(false)
+  const [varianceDialogOpen, setVarianceDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -692,6 +698,38 @@ function App() {
     }
   }
 
+  async function runVarianceComparison(columnId1: string, columnId2: string, alpha: number) {
+    const column1 = columns.find((item) => item.id === columnId1)
+    const column2 = columns.find((item) => item.id === columnId2)
+    if (!column1 || !column2 || column1.type !== 'numeric' || column2.type !== 'numeric') {
+      setToast('Välj två numeriska kolumner för variansjämförelsen.')
+      return
+    }
+    const values1 = rows.map((row) => {
+      const raw = row[column1.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const values2 = rows.map((row) => {
+      const raw = row[column2.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.compareVariances(values1, values2, alpha),
+        statsWorker.describe(values1),
+      ])
+      setSession({
+        title: 'Jämför två varianser',
+        columnName: `${column1.name} · ${column2.name}`,
+        summary,
+        varianceComparison: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Variansjämförelsen kunde inte genomföras.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
     if (action === 'addRow') insertRow(activeCell.row)
@@ -733,6 +771,7 @@ function App() {
     else if (action === 'correlation') setCorrelationDialogOpen(true)
     else if (action === 'oneSamplePoissonRate') setOneSamplePoissonDialogOpen(true)
     else if (action === 'twoSamplePoissonRate') setTwoSamplePoissonDialogOpen(true)
+    else if (action === 'compareVariances') setVarianceDialogOpen(true)
     else setToast(`${action}: inte tillgängligt i denna första version.`)
   }
 
@@ -835,7 +874,9 @@ function App() {
                   ? `\nHändelser: ${session.oneSamplePoissonRate.eventCount}\nExponering: ${formatValue(session.oneSamplePoissonRate.totalExposure)}\nHastighet: ${formatValue(session.oneSamplePoissonRate.observedRate)}\nz: ${formatValue(session.oneSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.oneSamplePoissonRate.pValue, language)}\nGarwood-KI: [${formatValue(session.oneSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.oneSamplePoissonRate.confidenceInterval[1])}]`
                   : session.twoSamplePoissonRate
                     ? `\nHastighetsskillnad: ${formatValue(session.twoSamplePoissonRate.difference)}\nz: ${formatValue(session.twoSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.twoSamplePoissonRate.pValue, language)}\nKI: [${formatValue(session.twoSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.twoSamplePoissonRate.confidenceInterval[1])}]`
-                    : ''
+                    : session.varianceComparison
+                      ? `\nF: ${formatValue(session.varianceComparison.fStatistic)}\nF p-värde: ${formatPValue(session.varianceComparison.fPValue, language)}\nBartlett p-värde: ${formatPValue(session.varianceComparison.bartlettPValue, language)}\nLevene p-värde: ${formatPValue(session.varianceComparison.levenePValue, language)}`
+                      : ''
     const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
@@ -1700,6 +1741,56 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.varianceComparison && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Variansjämförelser' : 'Variance comparisons'}
+                >
+                  <h4>{language === 'sv' ? 'Jämförelse av varianser' : 'Compare variances'}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>s₁² / s₂²</span>
+                      <strong>
+                        {formatValue(session.varianceComparison.variance1)} /{' '}
+                        {formatValue(session.varianceComparison.variance2)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>F ({session.varianceComparison.fDegreesOfFreedom.join(', ')})</span>
+                      <strong>{formatValue(session.varianceComparison.fStatistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>F p-värde</span>
+                      <strong>{formatPValue(session.varianceComparison.fPValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Bartlett χ²</span>
+                      <strong>{formatValue(session.varianceComparison.bartlettStatistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Bartlett p</span>
+                      <strong>
+                        {formatPValue(session.varianceComparison.bartlettPValue, language)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Levene F</span>
+                      <strong>{formatValue(session.varianceComparison.leveneStatistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Levene p</span>
+                      <strong>
+                        {formatPValue(session.varianceComparison.levenePValue, language)}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `F- och Bartlett-test förutsätter normalfördelning; median-Levene är robustare. p-värden jämförs med α = ${formatValue(session.varianceComparison.alpha)}. Normalitet har inte testats.`
+                      : `F and Bartlett tests assume normality; median-centered Levene is more robust. p-values are compared with α = ${formatValue(session.varianceComparison.alpha)}. Normality was not tested.`}
+                  </p>
+                </section>
+              )}
               <p className="session-caption">
                 Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
                 värden uteslöts.
@@ -1840,6 +1931,17 @@ function App() {
         onOpenChange={setCorrelationDialogOpen}
         onSubmit={(columnId1, columnId2, alpha) => {
           void runCorrelationAnalysis(columnId1, columnId2, alpha)
+        }}
+      />
+      <CompareVariancesDialog
+        open={varianceDialogOpen}
+        initialColumn1={numericColumns[0]?.id ?? ''}
+        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setVarianceDialogOpen}
+        onSubmit={(columnId1, columnId2, alpha) => {
+          void runVarianceComparison(columnId1, columnId2, alpha)
         }}
       />
       <OneSamplePoissonRateDialog

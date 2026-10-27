@@ -10,13 +10,23 @@ declare module 'jstat' {
   }
 
   interface ChiSquareDistribution {
+    cdf(value: number, degreesOfFreedom: number): number
     inv(probability: number, degreesOfFreedom: number): number
+  }
+
+  interface FDistribution {
+    cdf(
+      value: number,
+      numeratorDegreesOfFreedom: number,
+      denominatorDegreesOfFreedom: number,
+    ): number
   }
 
   const jStat: {
     studentt: StudentTDistribution
     normal: NormalDistribution
     chisquare: ChiSquareDistribution
+    centralF: FDistribution
   }
 
   export default jStat
