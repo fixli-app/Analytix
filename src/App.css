@@ -835,6 +835,51 @@ input:focus-visible {
 .t-test-grid .stat-cell {
   min-height: 42px;
 }
+.contingency-scroll {
+  max-width: 100%;
+  margin-bottom: 8px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.contingency-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 9px;
+}
+.contingency-table th,
+.contingency-table td {
+  min-width: 58px;
+  padding: 6px 7px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.contingency-table th {
+  background: var(--canvas);
+  color: var(--muted);
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  font-weight: 600;
+  text-align: left;
+}
+.contingency-table td strong,
+.contingency-table td small {
+  display: block;
+}
+.contingency-table td strong {
+  color: var(--ink);
+  font-size: 10px;
+}
+.contingency-table td small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+.contingency-table td small.expected-small {
+  color: var(--accent);
+  font-weight: 600;
+}
 .session-conclusion {
   margin: 9px 0 0;
   color: var(--ink);

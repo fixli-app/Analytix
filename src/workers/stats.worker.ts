@@ -2,6 +2,7 @@ import { expose } from 'comlink'
 import { describe } from '../stats/descriptive'
 import { correlation } from '../stats/correlation'
 import { compareVariances } from '../stats/compareVariances'
+import { chiSquareIndependence } from '../stats/chiSquare'
 import { oneSampleT } from '../stats/oneSampleT'
 import { oneProportion } from '../stats/oneProportion'
 import { oneSamplePoissonRate } from '../stats/oneSamplePoissonRate'
@@ -18,6 +19,7 @@ const api = {
   describe,
   correlation,
   compareVariances,
+  chiSquareIndependence,
   oneProportion,
   oneSamplePoissonRate,
   oneSampleZ,

@@ -57,6 +57,7 @@ import type { CorrelationResult } from './stats/correlation'
 import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
 import type { OneSampleZResult } from './stats/oneSampleZ'
 import type { NormalKsResult } from './stats/normalKs'
+import type { ChiSquareIndependenceResult } from './stats/chiSquare'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -69,6 +70,7 @@ import { CorrelationDialog } from './dialogs/CorrelationDialog'
 import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog'
 import { OneSampleZDialog } from './dialogs/OneSampleZDialog'
 import { NormalKSDialog } from './dialogs/NormalKSDialog'
+import { ChiSquareDialog } from './dialogs/ChiSquareDialog'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -111,6 +113,7 @@ const menuContent: Record<string, string[]> = {
     'twoSamplePoissonRate',
     'compareVariances',
     'normalKS',
+    'chiSquare',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -141,15 +144,17 @@ const actionLabelKeys: Record<string, string> = {
   twoSamplePoissonRate: 'twoSamplePoissonRate',
   compareVariances: 'compareVariances',
   normalKS: 'normalKS',
+  chiSquare: 'chiSquare',
 }
 
 interface SessionResult {
   title: string
   columnName: string
-  summary: DescriptiveSummary
+  summary?: DescriptiveSummary
   oneSampleT?: OneSampleTResult
   oneSampleZ?: OneSampleZResult
   normalKS?: NormalKsResult
+  chiSquare?: ChiSquareIndependenceResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -281,6 +286,7 @@ function App() {
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
   const [oneSampleZDialogOpen, setOneSampleZDialogOpen] = useState(false)
   const [normalKSDialogOpen, setNormalKSDialogOpen] = useState(false)
+  const [chiSquareDialogOpen, setChiSquareDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -562,6 +568,28 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Normalitetstestet kunde inte genomföras.')
+    }
+  }
+
+  async function runChiSquareAnalysis(columnId1: string, columnId2: string, alpha: number) {
+    const column1 = columns.find((item) => item.id === columnId1)
+    const column2 = columns.find((item) => item.id === columnId2)
+    if (!column1 || !column2) {
+      setToast('Välj två kategorikolumner för chi-två-testet.')
+      return
+    }
+    const values1 = rows.map((row) => row[column1.id] ?? null)
+    const values2 = rows.map((row) => row[column2.id] ?? null)
+    try {
+      const result = await statsWorker.chiSquareIndependence(values1, values2, alpha)
+      setSession({
+        title: 'Korstabell och chi-två-test',
+        columnName: `${column1.name} · ${column2.name}`,
+        chiSquare: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Chi-två-testet kunde inte genomföras.')
     }
   }
 
@@ -883,6 +911,7 @@ function App() {
     else if (action === 'oneSampleZ') setOneSampleZDialogOpen(true)
     else if (action === 'twoSampleZ') setTwoSampleZDialogOpen(true)
     else if (action === 'normalKS') setNormalKSDialogOpen(true)
+    else if (action === 'chiSquare') setChiSquareDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -999,10 +1028,15 @@ function App() {
                         ? `\nHastighetsskillnad: ${formatValue(session.twoSamplePoissonRate.difference)}\nz: ${formatValue(session.twoSamplePoissonRate.statistic)}\np-värde: ${formatPValue(session.twoSamplePoissonRate.pValue, language)}\nKI: [${formatValue(session.twoSamplePoissonRate.confidenceInterval[0])}, ${formatValue(session.twoSamplePoissonRate.confidenceInterval[1])}]`
                         : session.varianceComparison
                           ? `\nF: ${formatValue(session.varianceComparison.fStatistic)}\nF p-värde: ${formatPValue(session.varianceComparison.fPValue, language)}\nBartlett p-värde: ${formatPValue(session.varianceComparison.bartlettPValue, language)}\nLevene p-värde: ${formatPValue(session.varianceComparison.levenePValue, language)}`
-                          : session.normalKS
-                            ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                            : ''
-    const text = `${session.title}: ${session.columnName}\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}${testResult}\nEj verifierad analys.`
+                          : session.chiSquare
+                            ? `\nχ²: ${formatValue(session.chiSquare.statistic)}\ndf: ${session.chiSquare.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquare.pValue, language)}\nCramér V: ${formatValue(session.chiSquare.cramersV)}`
+                            : session.normalKS
+                              ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                              : ''
+    const summaryText = summary
+      ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
+      : ''
+    const text = `${session.title}: ${session.columnName}${summaryText}${testResult}\nEj verifierad analys.`
     await navigator.clipboard.writeText(text)
     setToast('Sessionsresultatet kopierat.')
   }
@@ -1399,52 +1433,54 @@ function App() {
                 <CircleHelp size={12} />
                 {t('unverified')}
               </div>
-              <div className="stat-grid">
-                <div className="stat-cell">
-                  <span>Antal</span>
-                  <strong>{session.summary.count}</strong>
+              {session.summary && (
+                <div className="stat-grid">
+                  <div className="stat-cell">
+                    <span>Antal</span>
+                    <strong>{session.summary.count}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Medelvärde</span>
+                    <strong>{formatValue(session.summary.mean)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Median</span>
+                    <strong>{formatValue(session.summary.median)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Std.avvikelse</span>
+                    <strong>{formatValue(session.summary.standardDeviation)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Varians</span>
+                    <strong>{formatValue(session.summary.variance)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Standardfel</span>
+                    <strong>{formatValue(session.summary.standardError)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Q1 · R-7</span>
+                    <strong>{formatValue(session.summary.firstQuartile)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Q3 · R-7</span>
+                    <strong>{formatValue(session.summary.thirdQuartile)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Variationsbredd</span>
+                    <strong>{formatValue(session.summary.range)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Minimum</span>
+                    <strong>{formatValue(session.summary.minimum)}</strong>
+                  </div>
+                  <div className="stat-cell">
+                    <span>Maximum</span>
+                    <strong>{formatValue(session.summary.maximum)}</strong>
+                  </div>
                 </div>
-                <div className="stat-cell">
-                  <span>Medelvärde</span>
-                  <strong>{formatValue(session.summary.mean)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Median</span>
-                  <strong>{formatValue(session.summary.median)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Std.avvikelse</span>
-                  <strong>{formatValue(session.summary.standardDeviation)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Varians</span>
-                  <strong>{formatValue(session.summary.variance)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Standardfel</span>
-                  <strong>{formatValue(session.summary.standardError)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Q1 · R-7</span>
-                  <strong>{formatValue(session.summary.firstQuartile)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Q3 · R-7</span>
-                  <strong>{formatValue(session.summary.thirdQuartile)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Variationsbredd</span>
-                  <strong>{formatValue(session.summary.range)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Minimum</span>
-                  <strong>{formatValue(session.summary.minimum)}</strong>
-                </div>
-                <div className="stat-cell">
-                  <span>Maximum</span>
-                  <strong>{formatValue(session.summary.maximum)}</strong>
-                </div>
-              </div>
+              )}
               {session.oneSampleT && (
                 <section
                   className="t-test-result"
@@ -2076,13 +2112,100 @@ function App() {
                   </p>
                 </section>
               )}
-              <p className="session-caption">
-                Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade
-                värden uteslöts.
-              </p>
-              <p className="session-caption">
-                Beskrivande statistik sammanfattar fördelningen; ingen hypotesprövning har utförts.
-              </p>
+              {session.chiSquare && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv'
+                      ? 'Korstabell och chi-två'
+                      : 'Contingency table and chi-square'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Chi-två-test för samband'
+                      : 'Chi-square test of independence'}
+                  </h4>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{session.columnName.split(' · ')[0]}</th>
+                          {session.chiSquare.columnLabels.map((label) => (
+                            <th scope="col" key={label}>
+                              {label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.chiSquare.rowLabels.map((label, rowIndex) => (
+                          <tr key={label}>
+                            <th scope="row">{label}</th>
+                            {session.chiSquare.columnLabels.map((columnLabel, columnIndex) => {
+                              const expected = session.chiSquare!.expected[rowIndex][columnIndex]
+                              return (
+                                <td key={columnLabel}>
+                                  <strong>
+                                    {session.chiSquare!.observed[rowIndex][columnIndex]}
+                                  </strong>
+                                  <small className={expected < 5 ? 'expected-small' : ''}>
+                                    {language === 'sv' ? 'förv.' : 'exp.'} {formatValue(expected)}
+                                  </small>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>χ²</span>
+                      <strong>{formatValue(session.chiSquare.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Frihetsgrader</span>
+                      <strong>{session.chiSquare.degreesOfFreedom}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.chiSquare.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Cramérs V</span>
+                      <strong>{formatValue(session.chiSquare.cramersV)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `Vid α = ${formatValue(session.chiSquare.alpha)} ${session.chiSquare.pValue < session.chiSquare.alpha ? 'förkastas H₀ om oberoende.' : 'kan H₀ om oberoende inte förkastas.'}`
+                      : `At α = ${formatValue(session.chiSquare.alpha)} ${session.chiSquare.pValue < session.chiSquare.alpha ? 'reject the independence null hypothesis.' : 'do not reject the independence null hypothesis.'}`}
+                  </p>
+                  <p className="session-caption">
+                    {session.chiSquare.cellsBelowFive > 0
+                      ? language === 'sv'
+                        ? `${session.chiSquare.cellsBelowFive} celler har förväntat antal under 5; chi-två-approximationen kan vara osäker.`
+                        : `${session.chiSquare.cellsBelowFive} cells have expected counts below 5; the chi-square approximation may be unreliable.`
+                      : language === 'sv'
+                        ? 'Alla förväntade cellantal är minst 5. Oberoende mellan observationer har inte testats.'
+                        : 'All expected cell counts are at least 5. Independence of observations was not tested.'}
+                  </p>
+                </section>
+              )}
+              {session.summary && (
+                <>
+                  <p className="session-caption">
+                    Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation.
+                    Saknade värden uteslöts.
+                  </p>
+                  <p className="session-caption">
+                    Beskrivande statistik sammanfattar fördelningen; ingen hypotesprövning har
+                    utförts.
+                  </p>
+                </>
+              )}
             </article>
           ) : (
             <div className="session-entry">
@@ -2247,6 +2370,17 @@ function App() {
         onOpenChange={setNormalKSDialogOpen}
         onSubmit={(columnId, mean, standardDeviation) => {
           void runNormalKSAnalysis(columnId, mean, standardDeviation)
+        }}
+      />
+      <ChiSquareDialog
+        open={chiSquareDialogOpen}
+        initialColumn1={columns[0]?.id ?? ''}
+        initialColumn2={columns[1]?.id ?? columns[0]?.id ?? ''}
+        columns={columns}
+        language={language}
+        onOpenChange={setChiSquareDialogOpen}
+        onSubmit={(columnId1, columnId2, alpha) => {
+          void runChiSquareAnalysis(columnId1, columnId2, alpha)
         }}
       />
       <CompareVariancesDialog
