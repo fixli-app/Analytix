@@ -61,6 +61,7 @@ import type { ChiSquareIndependenceResult } from './stats/chiSquare'
 import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFit'
 import type { FisherExactResult } from './stats/fisherExact'
 import type { ProcessCapabilityResult } from './stats/processCapability'
+import type { ImrControlChartResult } from './stats/imrControlChart'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -77,6 +78,8 @@ import { ChiSquareDialog } from './dialogs/ChiSquareDialog'
 import { ChiSquareGoodnessOfFitDialog } from './dialogs/ChiSquareGoodnessOfFitDialog'
 import { FisherExactDialog } from './dialogs/FisherExactDialog'
 import { ProcessCapabilityDialog } from './dialogs/ProcessCapabilityDialog'
+import { ImrControlChartDialog } from './dialogs/ImrControlChartDialog'
+import { ImrControlCharts } from './charts/ImrControlCharts'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -126,7 +129,7 @@ const menuContent: Record<string, string[]> = {
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
-  graphs: ['Diagram kommer i kommande faser'],
+  graphs: ['imrControlChart'],
   editor: ['Makron kommer i kommande faser'],
   tools: ['Inställningar'],
   window: ['Arbetsblad', 'Session'],
@@ -157,6 +160,7 @@ const actionLabelKeys: Record<string, string> = {
   chiSquareUniform: 'chiSquareUniform',
   fisherExact: 'fisherExact',
   processCapability: 'processCapability',
+  imrControlChart: 'imrControlChart',
 }
 
 interface SessionResult {
@@ -170,6 +174,7 @@ interface SessionResult {
   chiSquareGoodnessOfFit?: ChiSquareGoodnessOfFitResult
   fisherExact?: FisherExactResult
   processCapability?: ProcessCapabilityResult
+  imrControlChart?: ImrControlChartResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -305,6 +310,7 @@ function App() {
   const [chiSquareGoodnessOfFitDialogOpen, setChiSquareGoodnessOfFitDialogOpen] = useState(false)
   const [fisherExactDialogOpen, setFisherExactDialogOpen] = useState(false)
   const [processCapabilityDialogOpen, setProcessCapabilityDialogOpen] = useState(false)
+  const [imrControlChartDialogOpen, setImrControlChartDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -621,6 +627,29 @@ function App() {
       setToast(
         error instanceof Error ? error.message : 'Kapabilitetsanalysen kunde inte genomföras.',
       )
+    }
+  }
+
+  async function runImrControlChartAnalysis(columnId: string) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn för I-MR-diagrammet.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const result = await statsWorker.imrControlChart(values)
+      setSession({
+        title: 'I-MR-styrdiagram',
+        columnName: column.name,
+        imrControlChart: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'I-MR-diagrammet kunde inte beräknas.')
     }
   }
 
@@ -1013,6 +1042,7 @@ function App() {
     else if (action === 'chiSquareUniform') setChiSquareGoodnessOfFitDialogOpen(true)
     else if (action === 'fisherExact') setFisherExactDialogOpen(true)
     else if (action === 'processCapability') setProcessCapabilityDialogOpen(true)
+    else if (action === 'imrControlChart') setImrControlChartDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -1137,9 +1167,11 @@ function App() {
                                 ? `\nFishers tvåsidiga p-värde: ${formatPValue(session.fisherExact.pValue, language)}\nOddskvot: ${session.fisherExact.oddsRatio === null ? 'odefinierad' : formatValue(session.fisherExact.oddsRatio)}`
                                 : session.processCapability
                                   ? `\nCp/Cpk: ${formatValue(session.processCapability.cp)} / ${formatValue(session.processCapability.cpk)}\nPp/Ppk: ${formatValue(session.processCapability.pp)} / ${formatValue(session.processCapability.ppk)}\nZ-bench inom: ${formatValue(session.processCapability.zBenchWithin)}\nObserverade PPM: ${formatValue(session.processCapability.observedPpm)}\nFörväntade PPM (normal): ${formatValue(session.processCapability.expectedOverallPpm)}`
-                                  : session.normalKS
-                                    ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                    : ''
+                                  : session.imrControlChart
+                                    ? `\nI-centrum: ${formatValue(session.imrControlChart.individuals.centerLine)}\nI-LCL/UCL: ${formatValue(session.imrControlChart.individuals.lowerControlLimit)} / ${formatValue(session.imrControlChart.individuals.upperControlLimit)}\nMR̄: ${formatValue(session.imrControlChart.averageMovingRange)}\nMR-UCL: ${formatValue(session.imrControlChart.movingRange.upperControlLimit)}\nRegelsignaler: ${session.imrControlChart.signals.length}`
+                                    : session.normalKS
+                                      ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                      : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2514,6 +2546,89 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.imrControlChart && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'I-MR-styrdiagramresultat' : 'I-MR control chart result'
+                  }
+                >
+                  <h4>{language === 'sv' ? 'I-MR-styrdiagram' : 'I-MR control chart'}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.imrControlChart.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'I-centrum' : 'I center'}</span>
+                      <strong>{formatValue(session.imrControlChart.individuals.centerLine)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>MR̄</span>
+                      <strong>{formatValue(session.imrControlChart.averageMovingRange)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Within-s' : 'Within s'}</span>
+                      <strong>
+                        {formatValue(session.imrControlChart.withinStandardDeviation)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>I-LCL / UCL</span>
+                      <strong>
+                        {formatValue(session.imrControlChart.individuals.lowerControlLimit)} /{' '}
+                        {formatValue(session.imrControlChart.individuals.upperControlLimit)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>MR-UCL</span>
+                      <strong>
+                        {formatValue(session.imrControlChart.movingRange.upperControlLimit)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Regelsignaler' : 'Rule signals'}</span>
+                      <strong>{session.imrControlChart.signals.length}</strong>
+                    </div>
+                  </div>
+                  <ImrControlCharts
+                    result={session.imrControlChart}
+                    language={language}
+                    theme={theme}
+                  />
+                  {session.imrControlChart.signals.length > 0 ? (
+                    <ul
+                      className="imr-signal-list"
+                      aria-label={language === 'sv' ? 'Regelsignaler' : 'Rule signals'}
+                    >
+                      {session.imrControlChart.signals.map((signal) => (
+                        <li key={`${signal.chart}-${signal.rule}-${signal.observations[0]}`}>
+                          <strong>{signal.chart}</strong>{' '}
+                          {signal.rule === 'beyond-limit'
+                            ? language === 'sv'
+                              ? 'utanför styrgräns'
+                              : 'beyond control limit'
+                            : language === 'sv'
+                              ? 'åtta i rad på samma sida'
+                              : 'eight consecutive on one side'}
+                          : {signal.observations.join(', ')}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="session-caption">
+                      {language === 'sv'
+                        ? 'Inga signaler enligt dessa regler. Det bevisar inte att processen är stabil.'
+                        : 'No signals under these rules. This does not prove process stability.'}
+                    </p>
+                  )}
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Individgränser: medelvärde ± 3 × MR̄/1,128. MR-gräns: 3,267 × MR̄. Åtta-på-en-sida är en Western Electric/Nelson-liknande regel; inga andra regler har kontrollerats.'
+                      : 'Individuals limits: mean ± 3 × MR̄/1.128. MR limit: 3.267 × MR̄. Eight-on-one-side is a Western Electric/Nelson-style rule; other rules were not checked.'}
+                  </p>
+                </section>
+              )}
               {session.summary && (
                 <>
                   <p className="session-caption">
@@ -2722,6 +2837,16 @@ function App() {
         onOpenChange={setProcessCapabilityDialogOpen}
         onSubmit={(columnId, lowerSpecLimit, upperSpecLimit, target) => {
           void runProcessCapability(columnId, lowerSpecLimit, upperSpecLimit, target)
+        }}
+      />
+      <ImrControlChartDialog
+        open={imrControlChartDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setImrControlChartDialogOpen}
+        onSubmit={(columnId) => {
+          void runImrControlChartAnalysis(columnId)
         }}
       />
       <ChiSquareGoodnessOfFitDialog
