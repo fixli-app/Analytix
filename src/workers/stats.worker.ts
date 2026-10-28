@@ -16,6 +16,7 @@ import { standardize } from '../stats/transform'
 import { twoSampleT } from '../stats/twoSampleT'
 import { twoProportions } from '../stats/twoProportions'
 import { twoSamplePoissonRate } from '../stats/twoSamplePoissonRate'
+import { normalProcessCapability } from '../stats/processCapability'
 
 const api = {
   describe,
@@ -35,6 +36,7 @@ const api = {
   twoSampleT,
   twoProportions,
   twoSamplePoissonRate,
+  normalProcessCapability,
 }
 
 export type StatsWorker = typeof api

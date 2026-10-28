@@ -55,7 +55,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 ## Fas 4: Kvalitetsverktyg
 
 - [ ] Styrdiagram: Xbar, R, S, Xbar-R, Xbar-S, I, MR, I-MR, Z-MR, Zone; P, NP, C, U, Laney P'/U'; CUSUM, EWMA; T² och generaliserad varians; Box-Cox; Nelson- och Westgard-regler; faser och ändrade gränser. Status: ej påbörjad.
-- [ ] Processduglighet: normal/icke-normal Cp, Cpk, Pp, Ppk, Cpm, Z-bench, PPM; Sixpack; binomial/Poisson; mellan/inom. Status: ej påbörjad.
+- [ ] Processduglighet: normal/icke-normal Cp, Cpk, Pp, Ppk, Cpm, Z-bench, PPM; Sixpack; binomial/Poisson; mellan/inom. Status: delmodul klar för normalfördelade individmätningar med Cp/Cpk, Pp/Ppk, valfri Cpm, observerade/förväntade PPM och within Z-bench utan 1,5σ-skift; subgroup-/mellan-inom-modeller, icke-normal, Sixpack och attributdata återstår.
 - [ ] Mätsystem: crossed/nested/expanderad Gage R&R; Gage Run Chart; Linearity and Bias; Type 1; Attribute Agreement/Attribute Gage; destruktiv Gage R&R. Status: ej påbörjad.
 - [ ] Pareto, orsak-verkan, kapabilitetsdiagram och multi-variabilitetsdiagram. Status: ej påbörjad.
 - [ ] Acceptansprovtagning för attribut/variabler och OC-kurvor. Status: ej påbörjad.
@@ -95,6 +95,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (73 tester) och `npm run build` passerar.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (77 tester) och `npm run build` passerar.
 - Webbläsarkontroll: analysresultat, provcellredigering + ångra, svensk/engelsk vy, ljust/mörkt tema, 390 px mobilvy, sökfilter, t-/Z-/proportionstest, korrelation, variansjämförelser, chi-två-tabell/GOF, Fisher exakt och Poisson-hastighet kontrollerade.
-- Nästa steg: fortsätt Fas 1 med normalitetstest med skattade parametrar, goodness-of-fit-varianter och fler grundläggande analyser. Fas 0 och senare fasers fulla omfattning återstår. Ingen fasrelease eller tagg skapad.
+- Nästa steg: bygg individstyrdiagram I-MR för att kontrollera stabilitet före capability-tolkning, därefter utöka processkapabilitet med subgroup-/mellan-inom-modeller. Resterande Fas 0–7 återstår. Ingen fasrelease eller tagg skapad.

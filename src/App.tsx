@@ -60,6 +60,7 @@ import type { NormalKsResult } from './stats/normalKs'
 import type { ChiSquareIndependenceResult } from './stats/chiSquare'
 import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFit'
 import type { FisherExactResult } from './stats/fisherExact'
+import type { ProcessCapabilityResult } from './stats/processCapability'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -75,6 +76,7 @@ import { NormalKSDialog } from './dialogs/NormalKSDialog'
 import { ChiSquareDialog } from './dialogs/ChiSquareDialog'
 import { ChiSquareGoodnessOfFitDialog } from './dialogs/ChiSquareGoodnessOfFitDialog'
 import { FisherExactDialog } from './dialogs/FisherExactDialog'
+import { ProcessCapabilityDialog } from './dialogs/ProcessCapabilityDialog'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -120,6 +122,7 @@ const menuContent: Record<string, string[]> = {
     'chiSquare',
     'chiSquareUniform',
     'fisherExact',
+    'processCapability',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -153,6 +156,7 @@ const actionLabelKeys: Record<string, string> = {
   chiSquare: 'chiSquare',
   chiSquareUniform: 'chiSquareUniform',
   fisherExact: 'fisherExact',
+  processCapability: 'processCapability',
 }
 
 interface SessionResult {
@@ -165,6 +169,7 @@ interface SessionResult {
   chiSquare?: ChiSquareIndependenceResult
   chiSquareGoodnessOfFit?: ChiSquareGoodnessOfFitResult
   fisherExact?: FisherExactResult
+  processCapability?: ProcessCapabilityResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -299,6 +304,7 @@ function App() {
   const [chiSquareDialogOpen, setChiSquareDialogOpen] = useState(false)
   const [chiSquareGoodnessOfFitDialogOpen, setChiSquareGoodnessOfFitDialogOpen] = useState(false)
   const [fisherExactDialogOpen, setFisherExactDialogOpen] = useState(false)
+  const [processCapabilityDialogOpen, setProcessCapabilityDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -580,6 +586,41 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Normalitetstestet kunde inte genomföras.')
+    }
+  }
+
+  async function runProcessCapability(
+    columnId: string,
+    lowerSpecLimit: number,
+    upperSpecLimit: number,
+    target: number | null,
+  ) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn för kapabilitetsanalysen.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const result = await statsWorker.normalProcessCapability(
+        values,
+        lowerSpecLimit,
+        upperSpecLimit,
+        target,
+      )
+      setSession({
+        title: 'Processkapabilitet (normal)',
+        columnName: column.name,
+        processCapability: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Kapabilitetsanalysen kunde inte genomföras.',
+      )
     }
   }
 
@@ -971,6 +1012,7 @@ function App() {
     else if (action === 'chiSquare') setChiSquareDialogOpen(true)
     else if (action === 'chiSquareUniform') setChiSquareGoodnessOfFitDialogOpen(true)
     else if (action === 'fisherExact') setFisherExactDialogOpen(true)
+    else if (action === 'processCapability') setProcessCapabilityDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -1093,9 +1135,11 @@ function App() {
                               ? `\nχ²: ${formatValue(session.chiSquareGoodnessOfFit.statistic)}\ndf: ${session.chiSquareGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquareGoodnessOfFit.pValue, language)}\nKategorier: ${session.chiSquareGoodnessOfFit.categories.join(', ')}`
                               : session.fisherExact
                                 ? `\nFishers tvåsidiga p-värde: ${formatPValue(session.fisherExact.pValue, language)}\nOddskvot: ${session.fisherExact.oddsRatio === null ? 'odefinierad' : formatValue(session.fisherExact.oddsRatio)}`
-                                : session.normalKS
-                                  ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                  : ''
+                                : session.processCapability
+                                  ? `\nCp/Cpk: ${formatValue(session.processCapability.cp)} / ${formatValue(session.processCapability.cpk)}\nPp/Ppk: ${formatValue(session.processCapability.pp)} / ${formatValue(session.processCapability.ppk)}\nZ-bench inom: ${formatValue(session.processCapability.zBenchWithin)}\nObserverade PPM: ${formatValue(session.processCapability.observedPpm)}\nFörväntade PPM (normal): ${formatValue(session.processCapability.expectedOverallPpm)}`
+                                  : session.normalKS
+                                    ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                    : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2390,6 +2434,86 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.processCapability && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Processkapabilitetsresultat' : 'Process capability result'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Processkapabilitet (normal, individdata)'
+                      : 'Process capability (normal, individual data)'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.processCapability.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Medelvärde' : 'Mean'}</span>
+                      <strong>{formatValue(session.processCapability.mean)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Within-s' : 'Within s'}</span>
+                      <strong>
+                        {formatValue(session.processCapability.withinStandardDeviation)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Overall-s' : 'Overall s'}</span>
+                      <strong>
+                        {formatValue(session.processCapability.overallStandardDeviation)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Cp</span>
+                      <strong>{formatValue(session.processCapability.cp)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Cpk</span>
+                      <strong>{formatValue(session.processCapability.cpk)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Pp</span>
+                      <strong>{formatValue(session.processCapability.pp)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Ppk</span>
+                      <strong>{formatValue(session.processCapability.ppk)}</strong>
+                    </div>
+                    {session.processCapability.cpm !== null && (
+                      <div className="stat-cell">
+                        <span>Cpm</span>
+                        <strong>{formatValue(session.processCapability.cpm)}</strong>
+                      </div>
+                    )}
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Z-bench within' : 'Z-bench within'}</span>
+                      <strong>{formatValue(session.processCapability.zBenchWithin)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Observerade PPM' : 'Observed PPM'}</span>
+                      <strong>{formatValue(session.processCapability.observedPpm)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Förväntade PPM' : 'Expected PPM'}</span>
+                      <strong>{formatValue(session.processCapability.expectedOverallPpm)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `Specifikation: [${formatValue(session.processCapability.lowerSpecLimit)}, ${formatValue(session.processCapability.upperSpecLimit)}]. Inom-s = MR̄/1,128; overall-s = stickprovsstandardavvikelse. ${session.processCapability.outOfSpecCount} observationer låg utanför gränserna.`
+                      : `Specifications: [${formatValue(session.processCapability.lowerSpecLimit)}, ${formatValue(session.processCapability.upperSpecLimit)}]. Within s = MR̄/1.128; overall s = sample standard deviation. ${session.processCapability.outOfSpecCount} observations were outside the limits.`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Z-bench within = 3 × Cpk utan 1,5σ-skift. Förväntade PPM bygger på normalfördelning med skattat medelvärde och overall-s. Normalitet, stabilitet och ordningsföljd har inte verifierats; raderna behandlas som tidsordnade individmätningar.'
+                      : 'Z-bench within = 3 × Cpk with no 1.5σ shift. Expected PPM assumes a normal distribution using the estimated mean and overall s. Normality, stability, and sequence were not verified; rows are treated as time-ordered individual measurements.'}
+                  </p>
+                </section>
+              )}
               {session.summary && (
                 <>
                   <p className="session-caption">
@@ -2588,6 +2712,16 @@ function App() {
         onOpenChange={setFisherExactDialogOpen}
         onSubmit={(columnId1, columnId2) => {
           void runFisherExact(columnId1, columnId2)
+        }}
+      />
+      <ProcessCapabilityDialog
+        open={processCapabilityDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setProcessCapabilityDialogOpen}
+        onSubmit={(columnId, lowerSpecLimit, upperSpecLimit, target) => {
+          void runProcessCapability(columnId, lowerSpecLimit, upperSpecLimit, target)
         }}
       />
       <ChiSquareGoodnessOfFitDialog

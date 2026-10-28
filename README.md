@@ -41,6 +41,7 @@ npm run build
 - Statistics menu: Pearson chi-square independence test with observed and expected contingency counts, Cramér's V, and small-cell diagnostics.
 - Statistics menu: chi-square goodness-of-fit for equal category probabilities, with observed/expected counts and small-cell warnings.
 - Statistics menu: two-sided Fisher exact test for 2×2 tables, with fixed margins and an odds-ratio estimate.
+- Statistics menu: normal process capability for individual measurements, including Cp/Cpk, Pp/Ppk, optional Cpm, observed/expected PPM, and within Z-bench without a 1.5σ shift.
 - Statistics menu: two-sided Kolmogorov-Smirnov test against a fully specified normal distribution; μ and σ are supplied by the user.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
@@ -68,9 +69,10 @@ npm run build
 | Chi-square test of independence                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/chiSquare.test.ts`; 2×2 fixture with expected counts and Cramér's V; external reference comparison remains                                                        |
 | Uniform chi-square goodness-of-fit                                                                    | Implemented; not independently reference-verified | `src/stats/__tests__/chiSquareGoodnessOfFit.test.ts`; 3-category fixture with equal expected frequencies; arbitrary category probabilities remain unsupported                          |
 | Two-sided Fisher exact test                                                                           | Implemented; not independently reference-verified | `src/stats/__tests__/fisherExact.test.ts`; classic 2×2 fixture `[[1, 9], [11, 3]]`; exact p-value and odds-ratio fixture; external reference comparison remains                        |
+| Normal process capability (individual measurements)                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/processCapability.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` fixture; within SD uses moving range/1.128; stability and normality remain unchecked                |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
-The seventy-three current tests cover descriptive summaries, standardization, specified-normal KS, chi-square independence and uniform goodness-of-fit, Fisher exact, one-/two-sample Z, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-/two-sample Poisson rates, F/Bartlett/Levene comparisons, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
+The seventy-seven current tests cover descriptive summaries, standardization, specified-normal KS, chi-square independence and uniform goodness-of-fit, Fisher exact, normal individual-measurement process capability, one-/two-sample Z, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-/two-sample Poisson rates, F/Bartlett/Levene comparisons, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. The analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 ## Architecture
 
