@@ -59,6 +59,7 @@ import type { OneSampleZResult } from './stats/oneSampleZ'
 import type { NormalKsResult } from './stats/normalKs'
 import type { ChiSquareIndependenceResult } from './stats/chiSquare'
 import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFit'
+import type { FisherExactResult } from './stats/fisherExact'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -73,6 +74,7 @@ import { OneSampleZDialog } from './dialogs/OneSampleZDialog'
 import { NormalKSDialog } from './dialogs/NormalKSDialog'
 import { ChiSquareDialog } from './dialogs/ChiSquareDialog'
 import { ChiSquareGoodnessOfFitDialog } from './dialogs/ChiSquareGoodnessOfFitDialog'
+import { FisherExactDialog } from './dialogs/FisherExactDialog'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -117,6 +119,7 @@ const menuContent: Record<string, string[]> = {
     'normalKS',
     'chiSquare',
     'chiSquareUniform',
+    'fisherExact',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -149,6 +152,7 @@ const actionLabelKeys: Record<string, string> = {
   normalKS: 'normalKS',
   chiSquare: 'chiSquare',
   chiSquareUniform: 'chiSquareUniform',
+  fisherExact: 'fisherExact',
 }
 
 interface SessionResult {
@@ -160,6 +164,7 @@ interface SessionResult {
   normalKS?: NormalKsResult
   chiSquare?: ChiSquareIndependenceResult
   chiSquareGoodnessOfFit?: ChiSquareGoodnessOfFitResult
+  fisherExact?: FisherExactResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -293,6 +298,7 @@ function App() {
   const [normalKSDialogOpen, setNormalKSDialogOpen] = useState(false)
   const [chiSquareDialogOpen, setChiSquareDialogOpen] = useState(false)
   const [chiSquareGoodnessOfFitDialogOpen, setChiSquareGoodnessOfFitDialogOpen] = useState(false)
+  const [fisherExactDialogOpen, setFisherExactDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -621,6 +627,29 @@ function App() {
     }
   }
 
+  async function runFisherExact(columnId1: string, columnId2: string) {
+    const column1 = columns.find((item) => item.id === columnId1)
+    const column2 = columns.find((item) => item.id === columnId2)
+    if (!column1 || !column2) {
+      setToast('Välj två kategorikolumner för Fishers test.')
+      return
+    }
+    try {
+      const result = await statsWorker.fisherExactTwoSided(
+        rows.map((row) => row[column1.id] ?? null),
+        rows.map((row) => row[column2.id] ?? null),
+      )
+      setSession({
+        title: 'Fishers exakta test',
+        columnName: `${column1.name} · ${column2.name}`,
+        fisherExact: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Fishers test kunde inte genomföras.')
+    }
+  }
+
   async function runTwoSampleTAnalysis(
     columnId1: string,
     columnId2: string,
@@ -941,6 +970,7 @@ function App() {
     else if (action === 'normalKS') setNormalKSDialogOpen(true)
     else if (action === 'chiSquare') setChiSquareDialogOpen(true)
     else if (action === 'chiSquareUniform') setChiSquareGoodnessOfFitDialogOpen(true)
+    else if (action === 'fisherExact') setFisherExactDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -1061,9 +1091,11 @@ function App() {
                             ? `\nχ²: ${formatValue(session.chiSquare.statistic)}\ndf: ${session.chiSquare.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquare.pValue, language)}\nCramér V: ${formatValue(session.chiSquare.cramersV)}`
                             : session.chiSquareGoodnessOfFit
                               ? `\nχ²: ${formatValue(session.chiSquareGoodnessOfFit.statistic)}\ndf: ${session.chiSquareGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquareGoodnessOfFit.pValue, language)}\nKategorier: ${session.chiSquareGoodnessOfFit.categories.join(', ')}`
-                              : session.normalKS
-                                ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                : ''
+                              : session.fisherExact
+                                ? `\nFishers tvåsidiga p-värde: ${formatPValue(session.fisherExact.pValue, language)}\nOddskvot: ${session.fisherExact.oddsRatio === null ? 'odefinierad' : formatValue(session.fisherExact.oddsRatio)}`
+                                : session.normalKS
+                                  ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                  : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2297,6 +2329,67 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.fisherExact && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Fishers exakta testresultat' : "Fisher's exact test result"
+                  }
+                >
+                  <h4>
+                    {language === 'sv' ? 'Fishers exakta 2×2-test' : "Fisher's exact 2x2 test"}
+                  </h4>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{session.columnName.split(' · ')[0]}</th>
+                          {session.fisherExact.columnLabels.map((label) => (
+                            <th scope="col" key={label}>
+                              {label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.fisherExact.rowLabels.map((label, rowIndex) => (
+                          <tr key={label}>
+                            <th scope="row">{label}</th>
+                            {session.fisherExact!.observed[rowIndex].map((count, columnIndex) => (
+                              <td key={session.fisherExact!.columnLabels[columnIndex]}>{count}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.fisherExact.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Exakt p-värde</span>
+                      <strong>{formatPValue(session.fisherExact.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Oddskvot</span>
+                      <strong>
+                        {session.fisherExact.oddsRatio === null
+                          ? 'odefinierad'
+                          : session.fisherExact.oddsRatio === Number.POSITIVE_INFINITY
+                            ? '∞'
+                            : formatValue(session.fisherExact.oddsRatio)}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Tvåsidigt exakt hypergeometriskt p-värde med fasta marginaler; ingen chi-två-approximation används.'
+                      : 'Two-sided exact hypergeometric p-value with fixed margins; no chi-square approximation is used.'}
+                  </p>
+                </section>
+              )}
               {session.summary && (
                 <>
                   <p className="session-caption">
@@ -2484,6 +2577,17 @@ function App() {
         onOpenChange={setChiSquareDialogOpen}
         onSubmit={(columnId1, columnId2, alpha) => {
           void runChiSquareAnalysis(columnId1, columnId2, alpha)
+        }}
+      />
+      <FisherExactDialog
+        open={fisherExactDialogOpen}
+        initialColumn1={columns[0]?.id ?? ''}
+        initialColumn2={columns[1]?.id ?? columns[0]?.id ?? ''}
+        columns={columns}
+        language={language}
+        onOpenChange={setFisherExactDialogOpen}
+        onSubmit={(columnId1, columnId2) => {
+          void runFisherExact(columnId1, columnId2)
         }}
       />
       <ChiSquareGoodnessOfFitDialog
