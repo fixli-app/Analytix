@@ -3,6 +3,7 @@ import { describe } from '../stats/descriptive'
 import { correlation } from '../stats/correlation'
 import { compareVariances } from '../stats/compareVariances'
 import { chiSquareIndependence } from '../stats/chiSquare'
+import { chiSquareUniformGoodnessOfFit } from '../stats/chiSquareGoodnessOfFit'
 import { oneSampleT } from '../stats/oneSampleT'
 import { oneProportion } from '../stats/oneProportion'
 import { oneSamplePoissonRate } from '../stats/oneSamplePoissonRate'
@@ -20,6 +21,7 @@ const api = {
   correlation,
   compareVariances,
   chiSquareIndependence,
+  chiSquareUniformGoodnessOfFit,
   oneProportion,
   oneSamplePoissonRate,
   oneSampleZ,

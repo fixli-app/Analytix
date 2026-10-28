@@ -58,6 +58,7 @@ import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
 import type { OneSampleZResult } from './stats/oneSampleZ'
 import type { NormalKsResult } from './stats/normalKs'
 import type { ChiSquareIndependenceResult } from './stats/chiSquare'
+import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFit'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -71,6 +72,7 @@ import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog
 import { OneSampleZDialog } from './dialogs/OneSampleZDialog'
 import { NormalKSDialog } from './dialogs/NormalKSDialog'
 import { ChiSquareDialog } from './dialogs/ChiSquareDialog'
+import { ChiSquareGoodnessOfFitDialog } from './dialogs/ChiSquareGoodnessOfFitDialog'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -114,6 +116,7 @@ const menuContent: Record<string, string[]> = {
     'compareVariances',
     'normalKS',
     'chiSquare',
+    'chiSquareUniform',
     'Beskrivande statistik',
     'Fler analyser kommer i kommande faser',
   ],
@@ -145,6 +148,7 @@ const actionLabelKeys: Record<string, string> = {
   compareVariances: 'compareVariances',
   normalKS: 'normalKS',
   chiSquare: 'chiSquare',
+  chiSquareUniform: 'chiSquareUniform',
 }
 
 interface SessionResult {
@@ -155,6 +159,7 @@ interface SessionResult {
   oneSampleZ?: OneSampleZResult
   normalKS?: NormalKsResult
   chiSquare?: ChiSquareIndependenceResult
+  chiSquareGoodnessOfFit?: ChiSquareGoodnessOfFitResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -287,6 +292,7 @@ function App() {
   const [oneSampleZDialogOpen, setOneSampleZDialogOpen] = useState(false)
   const [normalKSDialogOpen, setNormalKSDialogOpen] = useState(false)
   const [chiSquareDialogOpen, setChiSquareDialogOpen] = useState(false)
+  const [chiSquareGoodnessOfFitDialogOpen, setChiSquareGoodnessOfFitDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -590,6 +596,28 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Chi-två-testet kunde inte genomföras.')
+    }
+  }
+
+  async function runChiSquareGoodnessOfFit(columnId: string, alpha: number) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column) {
+      setToast('Välj en kategorikolumn för goodness-of-fit-testet.')
+      return
+    }
+    const values = rows.map((row) => row[column.id] ?? null)
+    try {
+      const result = await statsWorker.chiSquareUniformGoodnessOfFit(values, alpha)
+      setSession({
+        title: 'Chi-två goodness-of-fit (lika andelar)',
+        columnName: column.name,
+        chiSquareGoodnessOfFit: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Goodness-of-fit-testet kunde inte genomföras.',
+      )
     }
   }
 
@@ -912,6 +940,7 @@ function App() {
     else if (action === 'twoSampleZ') setTwoSampleZDialogOpen(true)
     else if (action === 'normalKS') setNormalKSDialogOpen(true)
     else if (action === 'chiSquare') setChiSquareDialogOpen(true)
+    else if (action === 'chiSquareUniform') setChiSquareGoodnessOfFitDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -1030,9 +1059,11 @@ function App() {
                           ? `\nF: ${formatValue(session.varianceComparison.fStatistic)}\nF p-värde: ${formatPValue(session.varianceComparison.fPValue, language)}\nBartlett p-värde: ${formatPValue(session.varianceComparison.bartlettPValue, language)}\nLevene p-värde: ${formatPValue(session.varianceComparison.levenePValue, language)}`
                           : session.chiSquare
                             ? `\nχ²: ${formatValue(session.chiSquare.statistic)}\ndf: ${session.chiSquare.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquare.pValue, language)}\nCramér V: ${formatValue(session.chiSquare.cramersV)}`
-                            : session.normalKS
-                              ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                              : ''
+                            : session.chiSquareGoodnessOfFit
+                              ? `\nχ²: ${formatValue(session.chiSquareGoodnessOfFit.statistic)}\ndf: ${session.chiSquareGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquareGoodnessOfFit.pValue, language)}\nKategorier: ${session.chiSquareGoodnessOfFit.categories.join(', ')}`
+                              : session.normalKS
+                                ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2194,6 +2225,78 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.chiSquareGoodnessOfFit && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Goodness-of-fit-resultat' : 'Goodness-of-fit result'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Chi-två goodness-of-fit · lika andelar'
+                      : 'Chi-square goodness-of-fit · equal proportions'}
+                  </h4>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Kategori' : 'Category'}</th>
+                          <th scope="col">{language === 'sv' ? 'Observerad' : 'Observed'}</th>
+                          <th scope="col">{language === 'sv' ? 'Förväntad' : 'Expected'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.chiSquareGoodnessOfFit.categories.map((category, index) => (
+                          <tr key={category}>
+                            <th scope="row">{category}</th>
+                            <td>{session.chiSquareGoodnessOfFit!.observed[index]}</td>
+                            <td
+                              className={
+                                session.chiSquareGoodnessOfFit.expected[index] < 5
+                                  ? 'expected-small'
+                                  : ''
+                              }
+                            >
+                              {formatValue(session.chiSquareGoodnessOfFit.expected[index])}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>χ²</span>
+                      <strong>{formatValue(session.chiSquareGoodnessOfFit.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Frihetsgrader</span>
+                      <strong>{session.chiSquareGoodnessOfFit.degreesOfFreedom}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>
+                        {formatPValue(session.chiSquareGoodnessOfFit.pValue, language)}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `${session.chiSquareGoodnessOfFit.pValue < session.chiSquareGoodnessOfFit.alpha ? 'Förkasta' : 'Förkasta inte'} H₀ om lika kategorisannolikheter (α = ${formatValue(session.chiSquareGoodnessOfFit.alpha)}).`
+                      : `${session.chiSquareGoodnessOfFit.pValue < session.chiSquareGoodnessOfFit.alpha ? 'Reject' : 'Do not reject'} H₀ of equal category probabilities (α = ${formatValue(session.chiSquareGoodnessOfFit.alpha)}).`}
+                  </p>
+                  <p className="session-caption">
+                    {session.chiSquareGoodnessOfFit.cellsBelowFive > 0
+                      ? language === 'sv'
+                        ? `${session.chiSquareGoodnessOfFit.cellsBelowFive} kategorier har förväntat antal under 5; chi-två-approximationen kan vara osäker.`
+                        : `${session.chiSquareGoodnessOfFit.cellsBelowFive} categories have expected counts below 5; the chi-square approximation may be unreliable.`
+                      : language === 'sv'
+                        ? 'Alla förväntade kategorital är minst 5.'
+                        : 'All expected category counts are at least 5.'}
+                  </p>
+                </section>
+              )}
               {session.summary && (
                 <>
                   <p className="session-caption">
@@ -2381,6 +2484,16 @@ function App() {
         onOpenChange={setChiSquareDialogOpen}
         onSubmit={(columnId1, columnId2, alpha) => {
           void runChiSquareAnalysis(columnId1, columnId2, alpha)
+        }}
+      />
+      <ChiSquareGoodnessOfFitDialog
+        open={chiSquareGoodnessOfFitDialogOpen}
+        initialColumn={columns[0]?.id ?? ''}
+        columns={columns}
+        language={language}
+        onOpenChange={setChiSquareGoodnessOfFitDialogOpen}
+        onSubmit={(columnId, alpha) => {
+          void runChiSquareGoodnessOfFit(columnId, alpha)
         }}
       />
       <CompareVariancesDialog
