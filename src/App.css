@@ -1066,6 +1066,14 @@ input:focus-visible {
   border-collapse: collapse;
   font-size: 10px;
 }
+.quality-table-title {
+  margin: 12px 0 6px;
+  color: var(--ink);
+  font-size: 10px;
+}
+.gage-table {
+  min-width: 650px;
+}
 .check-sheet-table {
   min-width: 450px;
 }

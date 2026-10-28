@@ -45,6 +45,7 @@ npm run build
 - Graphs menu: interactive I-MR control charts with individuals and moving-range panels, 3σ control limits, beyond-limit signals, and an eight-points-on-one-side run rule.
 - Graphs menu: histogram, grouped/ungrouped boxplot and individual-value plot, scatterplot, frequency bar chart, Pareto with cumulative percentage, empirical CDF, and row-ordered time series; Plotly loads on demand and provides toolbar image export.
 - Quality menu: locally saved DMAIC phase checklist/notes, SIPOC worksheet, 6M Ishikawa cause categories, five-why root-cause chain, editable FMEA with validated S/O/D scoring and RPN, check sheet, and DPU/PPM/DPMO/yield/sigma-level calculator.
+- Quality menu: crossed Gage R&R using balanced two-way ANOVA with interaction, variance components, %contribution, %study variation, optional %tolerance, and ndc; balanced complete data are required.
 - Statistics menu: two-sided Kolmogorov-Smirnov test against a fully specified normal distribution; μ and σ are supplied by the user.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
@@ -77,11 +78,16 @@ npm run build
 | General-purpose graphs (8 types)                                                                      | Implemented; browser-rendering checked            | `src/charts/__tests__/graphData.test.ts`; grouped data, paired missingness, frequency/Pareto aggregation, ECDF ordering; all eight plot titles and mobile width checked in browser     |
 | DPU/PPM/DPMO and sigma-level calculator                                                               | Implemented; not independently reference-verified | `src/quality/__tests__/defectMetrics.test.ts`; hand-calculated 100-unit fixture and input validation; sigma shift is user-selectable                                                   |
 | FMEA risk-priority number                                                                             | Implemented; formula fixture checked              | `src/quality/__tests__/fmea.test.ts`; RPN = severity × occurrence × detection on 1–10 integer scales; no universal RPN threshold is implied                                            |
+| Crossed Gage R&R                                                                                      | Implemented; not independently reference-verified | `src/quality/__tests__/gageRr.test.ts`; balanced fixture with known variance components and incomplete/unbalanced-design checks; normality and independence remain unchecked           |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
 The eighty-eight current tests cover descriptive summaries, standardization, specified-normal KS, chi-square independence and uniform goodness-of-fit, Fisher exact, normal individual-measurement process capability, I-MR control charts, eight graph-data types, one-/two-sample Z, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-/two-sample Poisson rates, F/Bartlett/Levene comparisons, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. Statistical analysis fixtures are hand-calculated; none is currently marked independently verified.
 
 The test-summary paragraph above is the graph-builder baseline. The current suite has 95 tests, including FMEA scoring and DPU/PPM/DPMO calculations. Quality templates are browser-tested but are not part of the statistical reference-verification claim.
+
+The test-summary paragraph above is the quality-toolkit baseline. The current suite has 98 tests, including the crossed Gage R&R model and its balanced-design validation fixture.
+
+Latest suite update: 99 tests, including the crossed Gage R&R model and its balanced-design regression fixture.
 
 ## Architecture
 

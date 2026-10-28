@@ -19,6 +19,7 @@ import { twoSamplePoissonRate } from '../stats/twoSamplePoissonRate'
 import { normalProcessCapability } from '../stats/processCapability'
 import { imrControlChart } from '../stats/imrControlChart'
 import { buildGraph } from '../charts/graphData'
+import { crossedGageRr } from '../quality/gageRr'
 
 const api = {
   describe,
@@ -41,6 +42,7 @@ const api = {
   normalProcessCapability,
   imrControlChart,
   buildGraph,
+  crossedGageRr,
 }
 
 export type StatsWorker = typeof api

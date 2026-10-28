@@ -56,7 +56,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - [ ] Styrdiagram: Xbar, R, S, Xbar-R, Xbar-S, I, MR, I-MR, Z-MR, Zone; P, NP, C, U, Laney P'/U'; CUSUM, EWMA; T² och generaliserad varians; Box-Cox; Nelson- och Westgard-regler; faser och ändrade gränser. Status: delmodul klar: I-MR individdiagram med MR̄/1,128- och 3,267×MR̄-gränser, interaktiva individ-/MR-grafer, 3σ-signaler och åtta-på-en-sida-regel; övriga diagram/regler återstår.
 - [ ] Processduglighet: normal/icke-normal Cp, Cpk, Pp, Ppk, Cpm, Z-bench, PPM; Sixpack; binomial/Poisson; mellan/inom. Status: delmodul klar för normalfördelade individmätningar med Cp/Cpk, Pp/Ppk, valfri Cpm, observerade/förväntade PPM och within Z-bench utan 1,5σ-skift; subgroup-/mellan-inom-modeller, icke-normal, Sixpack och attributdata återstår.
-- [ ] Mätsystem: crossed/nested/expanderad Gage R&R; Gage Run Chart; Linearity and Bias; Type 1; Attribute Agreement/Attribute Gage; destruktiv Gage R&R. Status: ej påbörjad.
+- [ ] Mätsystem: crossed/nested/expanderad Gage R&R; Gage Run Chart; Linearity and Bias; Type 1; Attribute Agreement/Attribute Gage; destruktiv Gage R&R. Status: delmodul klar: crossed, balanserad two-way ANOVA med interaktion, repeatability/reproducibility/part-to-part-komponenter, %contribution, %study variation, valfri %tolerance och ndc; nested/expanderad, attribut-MSA, bias/linearitet och referensverifiering återstår.
 - [ ] Pareto, orsak-verkan, kapabilitetsdiagram och multi-variabilitetsdiagram. Status: ej påbörjad.
 - [ ] Acceptansprovtagning för attribut/variabler och OC-kurvor. Status: ej påbörjad.
 - [ ] Riskbedömning och FMEA-tabell som tillägg. Status: delmodul klar: redigerbar FMEA med processsteg, felmod, effekt, orsak, S/O/D, beräknat RPN och åtgärd; hela riskprioriteringsmetodiken och uppföljning återstår.
@@ -96,6 +96,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (95 tester) och `npm run build` passerar.
-- Webbläsarkontroll: I-MR, åtta generella diagramtyper och kvalitetsverktygens DMAIC/SIPOC/Ishikawa/5 Why/FMEA/check sheet/DPMO-flöden kontrollerade; lokal persistens och responsiv tabellscroll fungerar.
-- Nästa steg: fortsätt med Xbar-R/Xbar-S, Gage R&R, regression/ANOVA och fler lean-/Six Sigma-verktyg. Resterande Fas 0–7 återstår. Ingen fasrelease eller tagg skapad.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (99 tester) och `npm run build` passerar.
+- Webbläsarkontroll: I-MR, åtta generella diagramtyper, kvalitetsverktygens DMAIC/SIPOC/Ishikawa/5 Why/FMEA/check sheet/DPMO-flöden och crossed Gage R&R-resultat kontrollerade; lokal persistens och responsiv tabellscroll fungerar.
+- Nästa steg: fortsätt med Xbar-R/Xbar-S, bias/linearitet och regression/ANOVA; därefter nested/attribut-MSA och fler lean-/Six Sigma-verktyg. Resterande Fas 0–7 återstår. Ingen fasrelease eller tagg skapad.

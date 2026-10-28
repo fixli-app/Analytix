@@ -63,6 +63,7 @@ import type { FisherExactResult } from './stats/fisherExact'
 import type { ProcessCapabilityResult } from './stats/processCapability'
 import type { ImrControlChartResult } from './stats/imrControlChart'
 import type { GraphModel } from './charts/graphData'
+import type { GageRrResult } from './quality/gageRr'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -84,6 +85,7 @@ import { ImrControlCharts } from './charts/ImrControlCharts'
 import { GraphPlot } from './charts/GraphPlot'
 import { GraphDialog, type GraphSelection } from './dialogs/GraphDialog'
 import { QualityStudioDialog } from './dialogs/QualityStudioDialog'
+import { GageRrDialog } from './dialogs/GageRrDialog'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -135,7 +137,7 @@ const menuContent: Record<string, string[]> = {
     'Fler analyser kommer i kommande faser',
   ],
   graphs: ['imrControlChart', 'chartBuilder'],
-  quality: ['qualityStudio'],
+  quality: ['qualityStudio', 'gageRr'],
   editor: ['Makron kommer i kommande faser'],
   tools: ['Inställningar'],
   window: ['Arbetsblad', 'Session'],
@@ -169,6 +171,7 @@ const actionLabelKeys: Record<string, string> = {
   imrControlChart: 'imrControlChart',
   chartBuilder: 'chartBuilder',
   qualityStudio: 'qualityStudio',
+  gageRr: 'gageRr',
 }
 
 interface SessionResult {
@@ -184,6 +187,7 @@ interface SessionResult {
   processCapability?: ProcessCapabilityResult
   imrControlChart?: ImrControlChartResult
   graph?: GraphModel
+  gageRr?: GageRrResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -205,6 +209,35 @@ function formatPValue(value: number, language: string): string {
   return new Intl.NumberFormat(language === 'sv' ? 'sv-SE' : 'en-US', {
     maximumFractionDigits: 3,
   }).format(value)
+}
+
+function gageAnovaLabel(
+  source: GageRrResult['anova'][number]['source'],
+  isSwedish: boolean,
+): string {
+  const labels = {
+    part: ['Del', 'Part'],
+    operator: ['Operatör', 'Operator'],
+    partOperator: ['Del × operatör', 'Part × operator'],
+    repeatability: ['Upprepbarhet / fel', 'Repeatability / error'],
+  } as const
+  return labels[source][isSwedish ? 0 : 1]
+}
+
+function gageComponentLabel(
+  component: keyof GageRrResult['varianceComponents'],
+  isSwedish: boolean,
+): string {
+  const labels: Record<keyof GageRrResult['varianceComponents'], [string, string]> = {
+    repeatability: ['Upprepbarhet', 'Repeatability'],
+    operator: ['Operatör', 'Operator'],
+    partOperator: ['Del × operatör', 'Part × operator'],
+    reproducibility: ['Reproducerbarhet', 'Reproducibility'],
+    gageRr: ['Gage R&R', 'Gage R&R'],
+    partToPart: ['Del-till-del', 'Part-to-part'],
+    total: ['Total variation', 'Total variation'],
+  }
+  return labels[component][isSwedish ? 0 : 1]
 }
 
 function GridCell({
@@ -322,6 +355,7 @@ function App() {
   const [imrControlChartDialogOpen, setImrControlChartDialogOpen] = useState(false)
   const [graphDialogOpen, setGraphDialogOpen] = useState(false)
   const [qualityStudioOpen, setQualityStudioOpen] = useState(false)
+  const [gageRrDialogOpen, setGageRrDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -433,6 +467,7 @@ function App() {
   }, [toast])
 
   const activeColumn = columns[activeCell.column]
+  const isSwedish = language === 'sv'
   const numericColumns = columns.filter((column) => column.type === 'numeric')
   const categoryColumns = columns.filter((column) => column.type !== 'numeric')
 
@@ -662,6 +697,46 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'I-MR-diagrammet kunde inte beräknas.')
+    }
+  }
+
+  async function runGageRrAnalysis(
+    partColumnId: string,
+    operatorColumnId: string,
+    measurementColumnId: string,
+    tolerance: number | null,
+  ) {
+    const partColumn = columns.find((column) => column.id === partColumnId)
+    const operatorColumn = columns.find((column) => column.id === operatorColumnId)
+    const measurementColumn = columns.find((column) => column.id === measurementColumnId)
+    if (
+      !partColumn ||
+      !operatorColumn ||
+      !measurementColumn ||
+      measurementColumn.type !== 'numeric'
+    ) {
+      setToast('Välj del, operatör och numeriskt mätvärde för Gage R&R.')
+      return
+    }
+    const measurements = rows.map((row) => {
+      const raw = row[measurementColumn.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const result = await statsWorker.crossedGageRr({
+        parts: rows.map((row) => row[partColumn.id]?.trim() || null),
+        operators: rows.map((row) => row[operatorColumn.id]?.trim() || null),
+        measurements,
+        tolerance,
+      })
+      setSession({
+        title: 'Gage R&R (crossed)',
+        columnName: `${measurementColumn.name} · ${partColumn.name} · ${operatorColumn.name}`,
+        gageRr: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Gage R&R kunde inte beräknas.')
     }
   }
 
@@ -1095,6 +1170,7 @@ function App() {
     else if (action === 'imrControlChart') setImrControlChartDialogOpen(true)
     else if (action === 'chartBuilder') setGraphDialogOpen(true)
     else if (action === 'qualityStudio') setQualityStudioOpen(true)
+    else if (action === 'gageRr') setGageRrDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -1223,9 +1299,11 @@ function App() {
                                     ? `\nI-centrum: ${formatValue(session.imrControlChart.individuals.centerLine)}\nI-LCL/UCL: ${formatValue(session.imrControlChart.individuals.lowerControlLimit)} / ${formatValue(session.imrControlChart.individuals.upperControlLimit)}\nMR̄: ${formatValue(session.imrControlChart.averageMovingRange)}\nMR-UCL: ${formatValue(session.imrControlChart.movingRange.upperControlLimit)}\nRegelsignaler: ${session.imrControlChart.signals.length}`
                                     : session.graph
                                       ? `\nDiagram: ${session.graph.title}\nn: ${session.graph.sampleCount}`
-                                      : session.normalKS
-                                        ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                        : ''
+                                      : session.gageRr
+                                        ? `\nGage R&R: ${formatValue(session.gageRr.percentStudyVariation.gageRr)} % study variation\n% contribution: ${formatValue(session.gageRr.percentContribution.gageRr)}\nndc: ${session.gageRr.numberOfDistinctCategories}`
+                                        : session.normalKS
+                                          ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                          : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2686,6 +2764,145 @@ function App() {
               {session.graph && (
                 <GraphPlot graph={session.graph} language={language} theme={theme} />
               )}
+              {session.gageRr && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Gage R&R-resultat' : 'Gage R&R result'}
+                >
+                  <h4>Gage R&amp;R (crossed ANOVA)</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Delar' : 'Parts'}</span>
+                      <strong>{session.gageRr.partCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Operatörer' : 'Operators'}</span>
+                      <strong>{session.gageRr.operatorCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Replikat/cell' : 'Replicates/cell'}</span>
+                      <strong>{session.gageRr.replicatesPerCell}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {language === 'sv'
+                          ? '% Gage R&R study variation'
+                          : '% Gage R&R study variation'}
+                      </span>
+                      <strong>{formatValue(session.gageRr.percentStudyVariation.gageRr)}%</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {language === 'sv' ? '% Gage R&R bidrag' : '% Gage R&R contribution'}
+                      </span>
+                      <strong>{formatValue(session.gageRr.percentContribution.gageRr)}%</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>ndc</span>
+                      <strong>
+                        {session.gageRr.numberOfDistinctCategories === Number.POSITIVE_INFINITY
+                          ? '∞'
+                          : session.gageRr.numberOfDistinctCategories}
+                      </strong>
+                    </div>
+                    {session.gageRr.percentTolerance !== null && (
+                      <div className="stat-cell">
+                        <span>% tolerance</span>
+                        <strong>{formatValue(session.gageRr.percentTolerance)}%</strong>
+                      </div>
+                    )}
+                  </div>
+                  <h5 className="quality-table-title">
+                    {isSwedish ? 'ANOVA-tabell' : 'ANOVA table'}
+                  </h5>
+                  <div className="quality-table-wrap">
+                    <table className="quality-table gage-table">
+                      <thead>
+                        <tr>
+                          <th>{isSwedish ? 'Källa' : 'Source'}</th>
+                          <th>DF</th>
+                          <th>SS</th>
+                          <th>MS</th>
+                          <th>F</th>
+                          <th>p</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.gageRr.anova.map((row) => (
+                          <tr key={row.source}>
+                            <th scope="row">{gageAnovaLabel(row.source, isSwedish)}</th>
+                            <td>{row.degreesOfFreedom}</td>
+                            <td>{formatValue(row.sumSquares)}</td>
+                            <td>{formatValue(row.meanSquare)}</td>
+                            <td>{row.fStatistic === null ? '—' : formatValue(row.fStatistic)}</td>
+                            <td>
+                              {row.pValue === null ? '—' : formatPValue(row.pValue, language)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <h5 className="quality-table-title">
+                    {isSwedish ? 'Varianskomponenter' : 'Variance components'}
+                  </h5>
+                  <div className="quality-table-wrap">
+                    <table className="quality-table gage-table">
+                      <thead>
+                        <tr>
+                          <th>{isSwedish ? 'Komponent' : 'Component'}</th>
+                          <th>{isSwedish ? 'Varians' : 'Variance'}</th>
+                          <th>% contribution</th>
+                          <th>% study variation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(
+                          [
+                            [
+                              'repeatability',
+                              session.gageRr.varianceComponents.repeatability,
+                              session.gageRr.percentContribution.repeatability,
+                              session.gageRr.percentStudyVariation.repeatability,
+                            ],
+                            [
+                              'reproducibility',
+                              session.gageRr.varianceComponents.reproducibility,
+                              session.gageRr.percentContribution.reproducibility,
+                              session.gageRr.percentStudyVariation.reproducibility,
+                            ],
+                            [
+                              'gageRr',
+                              session.gageRr.varianceComponents.gageRr,
+                              session.gageRr.percentContribution.gageRr,
+                              session.gageRr.percentStudyVariation.gageRr,
+                            ],
+                            [
+                              'partToPart',
+                              session.gageRr.varianceComponents.partToPart,
+                              session.gageRr.percentContribution.partToPart,
+                              session.gageRr.percentStudyVariation.partToPart,
+                            ],
+                            ['total', session.gageRr.varianceComponents.total, 100, 100],
+                          ] as const
+                        ).map(([component, variance, contribution, studyVariation]) => (
+                          <tr key={component}>
+                            <th scope="row">{gageComponentLabel(component, isSwedish)}</th>
+                            <td>{formatValue(variance)}</td>
+                            <td>{formatValue(contribution)}%</td>
+                            <td>{formatValue(studyVariation)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="session-caption">
+                    {isSwedish
+                      ? 'Crossed, balanserad slumpmodell med interaktion kvar i modellen; negativa skattade varianskomponenter sätts till 0. Normalitet, oberoende och stabilitet har inte testats. Tolkningströsklar är vägledande och kontextberoende.'
+                      : 'Crossed, balanced random-effects model with interaction retained; negative variance component estimates are set to 0. Normality, independence, and stability were not tested. Interpretation thresholds are guidance and context-dependent.'}
+                  </p>
+                </section>
+              )}
               {session.summary && (
                 <>
                   <p className="session-caption">
@@ -2921,6 +3138,18 @@ function App() {
         open={qualityStudioOpen}
         language={language}
         onOpenChange={setQualityStudioOpen}
+      />
+      <GageRrDialog
+        open={gageRrDialogOpen}
+        initialPartColumn={categoryColumns[0]?.id ?? ''}
+        initialOperatorColumn={categoryColumns[1]?.id ?? categoryColumns[0]?.id ?? ''}
+        numericColumns={numericColumns}
+        categoryColumns={categoryColumns}
+        language={language}
+        onOpenChange={setGageRrDialogOpen}
+        onSubmit={(partColumnId, operatorColumnId, measurementColumnId, tolerance) => {
+          void runGageRrAnalysis(partColumnId, operatorColumnId, measurementColumnId, tolerance)
+        }}
       />
       <ChiSquareGoodnessOfFitDialog
         open={chiSquareGoodnessOfFitDialogOpen}
