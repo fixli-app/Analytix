@@ -83,6 +83,7 @@ import { ImrControlChartDialog } from './dialogs/ImrControlChartDialog'
 import { ImrControlCharts } from './charts/ImrControlCharts'
 import { GraphPlot } from './charts/GraphPlot'
 import { GraphDialog, type GraphSelection } from './dialogs/GraphDialog'
+import { QualityStudioDialog } from './dialogs/QualityStudioDialog'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -94,6 +95,7 @@ const menuKeys = [
   'calculate',
   'statistics',
   'graphs',
+  'quality',
   'editor',
   'tools',
   'window',
@@ -133,6 +135,7 @@ const menuContent: Record<string, string[]> = {
     'Fler analyser kommer i kommande faser',
   ],
   graphs: ['imrControlChart', 'chartBuilder'],
+  quality: ['qualityStudio'],
   editor: ['Makron kommer i kommande faser'],
   tools: ['Inställningar'],
   window: ['Arbetsblad', 'Session'],
@@ -165,6 +168,7 @@ const actionLabelKeys: Record<string, string> = {
   processCapability: 'processCapability',
   imrControlChart: 'imrControlChart',
   chartBuilder: 'chartBuilder',
+  qualityStudio: 'qualityStudio',
 }
 
 interface SessionResult {
@@ -317,6 +321,7 @@ function App() {
   const [processCapabilityDialogOpen, setProcessCapabilityDialogOpen] = useState(false)
   const [imrControlChartDialogOpen, setImrControlChartDialogOpen] = useState(false)
   const [graphDialogOpen, setGraphDialogOpen] = useState(false)
+  const [qualityStudioOpen, setQualityStudioOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -1089,6 +1094,7 @@ function App() {
     else if (action === 'processCapability') setProcessCapabilityDialogOpen(true)
     else if (action === 'imrControlChart') setImrControlChartDialogOpen(true)
     else if (action === 'chartBuilder') setGraphDialogOpen(true)
+    else if (action === 'qualityStudio') setQualityStudioOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -2910,6 +2916,11 @@ function App() {
         onSubmit={(selection) => {
           void runGraphAnalysis(selection)
         }}
+      />
+      <QualityStudioDialog
+        open={qualityStudioOpen}
+        language={language}
+        onOpenChange={setQualityStudioOpen}
       />
       <ChiSquareGoodnessOfFitDialog
         open={chiSquareGoodnessOfFitDialogOpen}

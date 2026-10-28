@@ -59,7 +59,8 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 - [ ] Mätsystem: crossed/nested/expanderad Gage R&R; Gage Run Chart; Linearity and Bias; Type 1; Attribute Agreement/Attribute Gage; destruktiv Gage R&R. Status: ej påbörjad.
 - [ ] Pareto, orsak-verkan, kapabilitetsdiagram och multi-variabilitetsdiagram. Status: ej påbörjad.
 - [ ] Acceptansprovtagning för attribut/variabler och OC-kurvor. Status: ej påbörjad.
-- [ ] Riskbedömning och FMEA-tabell som tillägg. Status: ej påbörjad.
+- [ ] Riskbedömning och FMEA-tabell som tillägg. Status: delmodul klar: redigerbar FMEA med processsteg, felmod, effekt, orsak, S/O/D, beräknat RPN och åtgärd; hela riskprioriteringsmetodiken och uppföljning återstår.
+- [ ] Kvalitetsmetodik: DMAIC/DMADV, SIPOC, CTQ, process-/värdeflödeskarta, SWOT, brainstorming, affinitets-/relations-/träd-/matris-/besluts-/Pugh-diagram, Kaizen, 5S, PDCA, kontrollplan, Poka-Yoke, OEE, takt, flaskhals, rotorsak, fel-/händelseträd, COPQ, benchmarking, VOC/Kano och före/efter. Status: delmoduler klara: DMAIC-faschecklista/anteckningar, SIPOC-mall, 6M-fiskbensorsaker, 5 varför, datainsamlingsblad och DPMO/PPM/DPU/siganivå; övriga verktyg och full processhantering återstår.
 
 ## Fas 5: Försöksplanering (DOE)
 
@@ -95,6 +96,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (88 tester) och `npm run build` passerar.
-- Webbläsarkontroll: I-MR och samtliga åtta generella diagramtyper renderar; mobilbredd 390 px verifierad utan horisontell overflow. Oberoende statistisk referensverifiering återstår.
-- Nästa steg: fortsätt med Xbar-R/Xbar-S för subgroupdata, sannolikhetsdiagram och mer plotanpassning; därefter fler styrdiagram, Sixpack och mätsystemanalys. Resterande Fas 0–7 återstår. Ingen fasrelease eller tagg skapad.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (95 tester) och `npm run build` passerar.
+- Webbläsarkontroll: I-MR, åtta generella diagramtyper och kvalitetsverktygens DMAIC/SIPOC/Ishikawa/5 Why/FMEA/check sheet/DPMO-flöden kontrollerade; lokal persistens och responsiv tabellscroll fungerar.
+- Nästa steg: fortsätt med Xbar-R/Xbar-S, Gage R&R, regression/ANOVA och fler lean-/Six Sigma-verktyg. Resterande Fas 0–7 återstår. Ingen fasrelease eller tagg skapad.

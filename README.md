@@ -44,6 +44,7 @@ npm run build
 - Statistics menu: normal process capability for individual measurements, including Cp/Cpk, Pp/Ppk, optional Cpm, observed/expected PPM, and within Z-bench without a 1.5σ shift.
 - Graphs menu: interactive I-MR control charts with individuals and moving-range panels, 3σ control limits, beyond-limit signals, and an eight-points-on-one-side run rule.
 - Graphs menu: histogram, grouped/ungrouped boxplot and individual-value plot, scatterplot, frequency bar chart, Pareto with cumulative percentage, empirical CDF, and row-ordered time series; Plotly loads on demand and provides toolbar image export.
+- Quality menu: locally saved DMAIC phase checklist/notes, SIPOC worksheet, 6M Ishikawa cause categories, five-why root-cause chain, editable FMEA with validated S/O/D scoring and RPN, check sheet, and DPU/PPM/DPMO/yield/sigma-level calculator.
 - Statistics menu: two-sided Kolmogorov-Smirnov test against a fully specified normal distribution; μ and σ are supplied by the user.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
@@ -74,9 +75,13 @@ npm run build
 | Normal process capability (individual measurements)                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/processCapability.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` fixture; within SD uses moving range/1.128; stability and normality remain unchecked                |
 | I-MR control charts                                                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/imrControlChart.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` limits, out-of-control and run-rule fixtures; external reference comparison remains                   |
 | General-purpose graphs (8 types)                                                                      | Implemented; browser-rendering checked            | `src/charts/__tests__/graphData.test.ts`; grouped data, paired missingness, frequency/Pareto aggregation, ECDF ordering; all eight plot titles and mobile width checked in browser     |
+| DPU/PPM/DPMO and sigma-level calculator                                                               | Implemented; not independently reference-verified | `src/quality/__tests__/defectMetrics.test.ts`; hand-calculated 100-unit fixture and input validation; sigma shift is user-selectable                                                   |
+| FMEA risk-priority number                                                                             | Implemented; formula fixture checked              | `src/quality/__tests__/fmea.test.ts`; RPN = severity × occurrence × detection on 1–10 integer scales; no universal RPN threshold is implied                                            |
 | Other requested statistical analyses                                                                  | Not started                                       | No implementation or reference fixture yet                                                                                                                                             |
 
 The eighty-eight current tests cover descriptive summaries, standardization, specified-normal KS, chi-square independence and uniform goodness-of-fit, Fisher exact, normal individual-measurement process capability, I-MR control charts, eight graph-data types, one-/two-sample Z, correlation/covariance, one-/two-proportion tests, one-/two-sample and paired t-tests, one-/two-sample Poisson rates, F/Bartlett/Levene comparisons, row search, and workbook editing/history/data operations. This is not the requested 90% statistics coverage target. Statistical analysis fixtures are hand-calculated; none is currently marked independently verified.
+
+The test-summary paragraph above is the graph-builder baseline. The current suite has 95 tests, including FMEA scoring and DPU/PPM/DPMO calculations. Quality templates are browser-tested but are not part of the statistical reference-verification claim.
 
 ## Architecture
 
