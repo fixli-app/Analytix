@@ -36,7 +36,7 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 - [x] Statistik-delmodul: 1-urvals Poisson-hastighetstest med exponering, score-Z och Garwood-KI. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [x] Statistik-delmodul: tvåsidigt 2-urvals Poisson-hastighetstest för oberoende grupper med separata exponeringar, poolad H₀-varians och KI för hastighetsskillnaden. Status: klar med fixture- och browserflödestester; oberoende referensverifiering återstår.
 - [ ] Tabeller: korstabell och chi-två; chi-två goodness-of-fit; beskrivande statistik för tabeller; Fisher exakt test. Status: ej påbörjad.
-- [ ] Grafik: histogram (enkelt, anpassad fördelning, flera grupper); boxplot; individuellt värdediagram; punkt-, linje-, stapel- och cirkeldiagram; sannolikhetsdiagram; empirisk CDF; matris- och marginaldiagram; bubbeldiagram; 3D-spridning och yta; kontur-, intervall-, tidsserie- och områdesdiagram; dot plot; violin. Status: ej påbörjad.
+- [ ] Grafik: histogram (enkelt, anpassad fördelning, flera grupper); boxplot; individuellt värdediagram; punkt-, linje-, stapel- och cirkeldiagram; sannolikhetsdiagram; empirisk CDF; matris- och marginaldiagram; bubbeldiagram; 3D-spridning och yta; kontur-, intervall-, tidsserie- och områdesdiagram; dot plot; violin. Status: delmoduler klara: histogram, grupperad/ogrupperad boxplot och individvärde, punktdiagram, frekvensstapel, Pareto med kumulativ procent, empirisk CDF och tidsserie; alla övriga grafvarianter återstår.
 - [x] Delmängd av beskrivande statistik: antal, medelvärde, median, stickprovsstandardavvikelse, varians, standardfel, R-7-kvartiler, variationsbredd, minimum och maximum. Status: klar; handberäknat fixture `[1, 2, 3, 4]` testas med tolerans, men oberoende NIST/R/SciPy-verifiering återstår. Övriga beskrivande mått/analyser återstår.
 
 ## Fas 2: Hypotesprövning och icke-parametriskt
@@ -95,6 +95,6 @@ Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature m
 
 - Startläge: tom arbetsyta.
 - Delvis levererat: användbar grundvy med virtuellt datablad, redigering, inklistring, import/export, autospar, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
-- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (82 tester) och `npm run build` passerar.
-- Webbläsarkontroll: I-MR-grafer och signaler kontrollerades med numerisk testkolumn; tidigare analysflöden är också kontrollerade. Oberoende statistisk referensverifiering återstår.
-- Nästa steg: fortsätt med Xbar-R/Xbar-S för subgroupdata och grundläggande histogram/boxplot; därefter fler styrdiagram, Sixpack och mätsystemanalys. Resterande Fas 0–7 återstår. Ingen fasrelease eller tagg skapad.
+- Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (88 tester) och `npm run build` passerar.
+- Webbläsarkontroll: I-MR och samtliga åtta generella diagramtyper renderar; mobilbredd 390 px verifierad utan horisontell overflow. Oberoende statistisk referensverifiering återstår.
+- Nästa steg: fortsätt med Xbar-R/Xbar-S för subgroupdata, sannolikhetsdiagram och mer plotanpassning; därefter fler styrdiagram, Sixpack och mätsystemanalys. Resterande Fas 0–7 återstår. Ingen fasrelease eller tagg skapad.

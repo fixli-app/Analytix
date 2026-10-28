@@ -18,6 +18,7 @@ import { twoProportions } from '../stats/twoProportions'
 import { twoSamplePoissonRate } from '../stats/twoSamplePoissonRate'
 import { normalProcessCapability } from '../stats/processCapability'
 import { imrControlChart } from '../stats/imrControlChart'
+import { buildGraph } from '../charts/graphData'
 
 const api = {
   describe,
@@ -39,6 +40,7 @@ const api = {
   twoSamplePoissonRate,
   normalProcessCapability,
   imrControlChart,
+  buildGraph,
 }
 
 export type StatsWorker = typeof api
