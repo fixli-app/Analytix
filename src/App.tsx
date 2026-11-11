@@ -64,6 +64,7 @@ import type { ProcessCapabilityResult } from './stats/processCapability'
 import type { ImrControlChartResult } from './stats/imrControlChart'
 import type { GraphModel } from './charts/graphData'
 import type { GageRrResult } from './quality/gageRr'
+import type { SubgroupChartKind, SubgroupControlChartResult } from './quality/subgroupControlChart'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -86,6 +87,8 @@ import { GraphPlot } from './charts/GraphPlot'
 import { GraphDialog, type GraphSelection } from './dialogs/GraphDialog'
 import { QualityStudioDialog } from './dialogs/QualityStudioDialog'
 import { GageRrDialog } from './dialogs/GageRrDialog'
+import { SubgroupControlChartDialog } from './dialogs/SubgroupControlChartDialog'
+import { SubgroupControlCharts } from './charts/SubgroupControlCharts'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
@@ -137,7 +140,7 @@ const menuContent: Record<string, string[]> = {
     'Fler analyser kommer i kommande faser',
   ],
   graphs: ['imrControlChart', 'chartBuilder'],
-  quality: ['qualityStudio', 'gageRr'],
+  quality: ['qualityStudio', 'gageRr', 'subgroupControlChart'],
   editor: ['Makron kommer i kommande faser'],
   tools: ['Inställningar'],
   window: ['Arbetsblad', 'Session'],
@@ -172,6 +175,7 @@ const actionLabelKeys: Record<string, string> = {
   chartBuilder: 'chartBuilder',
   qualityStudio: 'qualityStudio',
   gageRr: 'gageRr',
+  subgroupControlChart: 'subgroupControlChart',
 }
 
 interface SessionResult {
@@ -188,6 +192,7 @@ interface SessionResult {
   imrControlChart?: ImrControlChartResult
   graph?: GraphModel
   gageRr?: GageRrResult
+  subgroupControlChart?: SubgroupControlChartResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -356,6 +361,7 @@ function App() {
   const [graphDialogOpen, setGraphDialogOpen] = useState(false)
   const [qualityStudioOpen, setQualityStudioOpen] = useState(false)
   const [gageRrDialogOpen, setGageRrDialogOpen] = useState(false)
+  const [subgroupControlChartDialogOpen, setSubgroupControlChartDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -737,6 +743,35 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Gage R&R kunde inte beräknas.')
+    }
+  }
+
+  async function runSubgroupControlChartAnalysis(
+    kind: SubgroupChartKind,
+    groupColumnId: string,
+    measurementColumnId: string,
+  ) {
+    const groupColumn = columns.find((column) => column.id === groupColumnId)
+    const measurementColumn = columns.find((column) => column.id === measurementColumnId)
+    if (!groupColumn || !measurementColumn || measurementColumn.type !== 'numeric') {
+      setToast('Välj en subgroupkolumn och ett numeriskt mätvärde.')
+      return
+    }
+    const groups = rows.map((row) => row[groupColumn.id]?.trim() || null)
+    const measurements = rows.map((row) => {
+      const raw = row[measurementColumn.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const result = await statsWorker.subgroupControlChart(groups, measurements, kind)
+      setSession({
+        title: kind === 'xbar-r' ? 'Xbar-R-styrdiagram' : 'Xbar-S-styrdiagram',
+        columnName: `${measurementColumn.name} · ${groupColumn.name}`,
+        subgroupControlChart: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Subgroupdiagrammet kunde inte beräknas.')
     }
   }
 
@@ -1171,6 +1206,7 @@ function App() {
     else if (action === 'chartBuilder') setGraphDialogOpen(true)
     else if (action === 'qualityStudio') setQualityStudioOpen(true)
     else if (action === 'gageRr') setGageRrDialogOpen(true)
+    else if (action === 'subgroupControlChart') setSubgroupControlChartDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -1301,9 +1337,11 @@ function App() {
                                       ? `\nDiagram: ${session.graph.title}\nn: ${session.graph.sampleCount}`
                                       : session.gageRr
                                         ? `\nGage R&R: ${formatValue(session.gageRr.percentStudyVariation.gageRr)} % study variation\n% contribution: ${formatValue(session.gageRr.percentContribution.gageRr)}\nndc: ${session.gageRr.numberOfDistinctCategories}`
-                                        : session.normalKS
-                                          ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                          : ''
+                                        : session.subgroupControlChart
+                                          ? `\nSubgrupper: ${session.subgroupControlChart.subgroupCount}\nn/subgrupp: ${session.subgroupControlChart.subgroupSize}\nXbar-centrum: ${formatValue(session.subgroupControlChart.xbar.centerLine)}\n${session.subgroupControlChart.variabilityChart.toUpperCase()}-centrum: ${formatValue(session.subgroupControlChart.variability.centerLine)}\nRegelsignaler: ${session.subgroupControlChart.signals.length}`
+                                          : session.normalKS
+                                            ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                            : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2764,6 +2802,89 @@ function App() {
               {session.graph && (
                 <GraphPlot graph={session.graph} language={language} theme={theme} />
               )}
+              {session.subgroupControlChart && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv'
+                      ? 'Subgroupstyrdiagramresultat'
+                      : 'Subgroup control chart result'
+                  }
+                >
+                  <h4>
+                    {session.subgroupControlChart.kind === 'xbar-r' ? 'Xbar-R' : 'Xbar-S'}{' '}
+                    {language === 'sv' ? 'styrdiagram' : 'control chart'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Subgrupper' : 'Subgroups'}</span>
+                      <strong>{session.subgroupControlChart.subgroupCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'n / subgrupp' : 'n / subgroup'}</span>
+                      <strong>{session.subgroupControlChart.subgroupSize}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Xbar center</span>
+                      <strong>{formatValue(session.subgroupControlChart.xbar.centerLine)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Xbar LCL / UCL</span>
+                      <strong>
+                        {formatValue(session.subgroupControlChart.xbar.lowerControlLimit)} /{' '}
+                        {formatValue(session.subgroupControlChart.xbar.upperControlLimit)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {session.subgroupControlChart.variabilityChart.toUpperCase()} center
+                      </span>
+                      <strong>
+                        {formatValue(session.subgroupControlChart.variability.centerLine)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {session.subgroupControlChart.variabilityChart.toUpperCase()} LCL / UCL
+                      </span>
+                      <strong>
+                        {formatValue(session.subgroupControlChart.variability.lowerControlLimit)} /{' '}
+                        {formatValue(session.subgroupControlChart.variability.upperControlLimit)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Signaler' : 'Signals'}</span>
+                      <strong>{session.subgroupControlChart.signals.length}</strong>
+                    </div>
+                  </div>
+                  <SubgroupControlCharts
+                    result={session.subgroupControlChart}
+                    language={language}
+                    theme={theme}
+                  />
+                  {session.subgroupControlChart.signals.length > 0 && (
+                    <ul
+                      className="imr-signal-list"
+                      aria-label={language === 'sv' ? 'Styrsignaler' : 'Control signals'}
+                    >
+                      {session.subgroupControlChart.signals.map((signal) => (
+                        <li key={`${signal.chart}-${signal.index}`}>
+                          <strong>{signal.chart.toUpperCase()}</strong>{' '}
+                          {language === 'sv'
+                            ? 'utanför styrgräns i subgrupp'
+                            : 'beyond control limit in subgroup'}{' '}
+                          {signal.subgroup} ({formatValue(signal.value)})
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Standardgränser för balanserade subgrupper, storlek 2–10. Normalitet, oberoende och tidsstabilitet kontrolleras inte.'
+                      : 'Standard limits for balanced subgroups, size 2–10. Normality, independence, and time stability are not checked.'}
+                  </p>
+                </section>
+              )}
               {session.gageRr && (
                 <section
                   className="t-test-result"
@@ -3149,6 +3270,18 @@ function App() {
         onOpenChange={setGageRrDialogOpen}
         onSubmit={(partColumnId, operatorColumnId, measurementColumnId, tolerance) => {
           void runGageRrAnalysis(partColumnId, operatorColumnId, measurementColumnId, tolerance)
+        }}
+      />
+      <SubgroupControlChartDialog
+        open={subgroupControlChartDialogOpen}
+        initialGroupColumn={categoryColumns[0]?.id ?? ''}
+        initialMeasurementColumn={numericColumns[0]?.id ?? ''}
+        categoryColumns={categoryColumns}
+        numericColumns={numericColumns}
+        language={language}
+        onOpenChange={setSubgroupControlChartDialogOpen}
+        onSubmit={(kind, groupColumnId, measurementColumnId) => {
+          void runSubgroupControlChartAnalysis(kind, groupColumnId, measurementColumnId)
         }}
       />
       <ChiSquareGoodnessOfFitDialog

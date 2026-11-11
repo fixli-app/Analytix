@@ -43,6 +43,7 @@ npm run build
 - Statistics menu: two-sided Fisher exact test for 2×2 tables, with fixed margins and an odds-ratio estimate.
 - Statistics menu: normal process capability for individual measurements, including Cp/Cpk, Pp/Ppk, optional Cpm, observed/expected PPM, and within Z-bench without a 1.5σ shift.
 - Graphs menu: interactive I-MR control charts with individuals and moving-range panels, 3σ control limits, beyond-limit signals, and an eight-points-on-one-side run rule.
+- Quality menu: Xbar-R and Xbar-S subgroup charts for balanced subgroups of size 2–10, with three-sigma limits and beyond-limit signals.
 - Graphs menu: histogram, grouped/ungrouped boxplot and individual-value plot, scatterplot, frequency bar chart, Pareto with cumulative percentage, empirical CDF, and row-ordered time series; Plotly loads on demand and provides toolbar image export.
 - Quality menu: locally saved DMAIC phase checklist/notes, SIPOC worksheet, 6M Ishikawa cause categories, five-why root-cause chain, editable FMEA with validated S/O/D scoring and RPN, check sheet, and DPU/PPM/DPMO/yield/sigma-level calculator.
 - Quality menu: crossed Gage R&R using balanced two-way ANOVA with interaction, variance components, %contribution, %study variation, optional %tolerance, and ndc; balanced complete data are required.
@@ -75,6 +76,7 @@ npm run build
 | Two-sided Fisher exact test                                                                           | Implemented; not independently reference-verified | `src/stats/__tests__/fisherExact.test.ts`; classic 2×2 fixture `[[1, 9], [11, 3]]`; exact p-value and odds-ratio fixture; external reference comparison remains                        |
 | Normal process capability (individual measurements)                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/processCapability.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` fixture; within SD uses moving range/1.128; stability and normality remain unchecked                |
 | I-MR control charts                                                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/imrControlChart.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` limits, out-of-control and run-rule fixtures; external reference comparison remains                   |
+| Xbar-R/Xbar-S subgroup charts                                                                         | Implemented; not independently reference-verified | `src/quality/__tests__/subgroupControlChart.test.ts`; hand-calculated n=2 Xbar-R and n=4 Xbar-S limits; complete balanced groups required; browser-rendered both chart pairs           |
 | General-purpose graphs (8 types)                                                                      | Implemented; browser-rendering checked            | `src/charts/__tests__/graphData.test.ts`; grouped data, paired missingness, frequency/Pareto aggregation, ECDF ordering; all eight plot titles and mobile width checked in browser     |
 | DPU/PPM/DPMO and sigma-level calculator                                                               | Implemented; not independently reference-verified | `src/quality/__tests__/defectMetrics.test.ts`; hand-calculated 100-unit fixture and input validation; sigma shift is user-selectable                                                   |
 | FMEA risk-priority number                                                                             | Implemented; formula fixture checked              | `src/quality/__tests__/fmea.test.ts`; RPN = severity × occurrence × detection on 1–10 integer scales; no universal RPN threshold is implied                                            |
@@ -87,7 +89,7 @@ The test-summary paragraph above is the graph-builder baseline. The current suit
 
 The test-summary paragraph above is the quality-toolkit baseline. The current suite has 98 tests, including the crossed Gage R&R model and its balanced-design validation fixture.
 
-Latest suite update: 99 tests, including the crossed Gage R&R model and its balanced-design regression fixture.
+Latest suite update: 103 tests, including crossed Gage R&R and balanced Xbar-R/Xbar-S subgroup fixtures.
 
 ## Architecture
 
