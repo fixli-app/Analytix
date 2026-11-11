@@ -2,7 +2,8 @@ import jStat from 'jstat'
 
 export interface PoissonGoodnessOfFitResult {
   count: number
-  estimatedRate: number
+  rate: number
+  rateSource: 'estimated' | 'specified'
   categories: string[]
   observed: number[]
   expected: number[]
@@ -24,12 +25,16 @@ export function poissonGoodnessOfFit(
   values: readonly (number | null | undefined)[],
   alpha = 0.05,
   minimumExpectedCount = 5,
+  specifiedRate: number | null = null,
 ): PoissonGoodnessOfFitResult {
   if (!Number.isFinite(alpha) || alpha <= 0 || alpha >= 1) {
     throw new Error('Alfa måste vara större än 0 och mindre än 1.')
   }
   if (!Number.isFinite(minimumExpectedCount) || minimumExpectedCount <= 0) {
     throw new Error('Minsta förväntade antal måste vara större än 0.')
+  }
+  if (specifiedRate !== null && (!Number.isFinite(specifiedRate) || specifiedRate <= 0)) {
+    throw new Error('Specificerad Poisson-hastighet måste vara större än 0.')
   }
   const observations = values.filter(
     (value): value is number => value !== null && value !== undefined,
@@ -45,24 +50,22 @@ export function poissonGoodnessOfFit(
   }
 
   const count = observations.length
-  const estimatedRate = mean(observations)
-  if (estimatedRate <= 0) {
+  const rateSource = specifiedRate === null ? 'estimated' : 'specified'
+  const rate = specifiedRate ?? mean(observations)
+  if (rate <= 0) {
     throw new Error('Poisson-goodness-of-fit kräver en positiv skattad hastighet.')
   }
   const maximumObserved = Math.max(...observations)
-  const cutoff = Math.min(
-    maximumObserved,
-    Math.ceil(estimatedRate + 10 * Math.sqrt(estimatedRate + 1) + 10),
-  )
+  const cutoff = Math.min(maximumObserved, Math.ceil(rate + 10 * Math.sqrt(rate + 1) + 10))
   const frequencies = new Array<number>(cutoff + 1).fill(0)
   observations.forEach((value) => {
     if (value <= cutoff) frequencies[value] += 1
   })
 
   const probabilities = new Array<number>(cutoff + 1)
-  probabilities[0] = Math.exp(-estimatedRate)
+  probabilities[0] = Math.exp(-rate)
   for (let category = 1; category <= cutoff; category += 1) {
-    probabilities[category] = (probabilities[category - 1] * estimatedRate) / category
+    probabilities[category] = (probabilities[category - 1] * rate) / category
   }
   const cumulativeProbability = probabilities.reduce((total, probability) => total + probability, 0)
   const tailProbability = Math.max(0, 1 - cumulativeProbability)
@@ -72,7 +75,7 @@ export function poissonGoodnessOfFit(
   rawObserved.push(observations.filter((value) => value > cutoff).length)
 
   const pooled = poolAdjacentCategories(rawObserved, rawExpected, minimumExpectedCount)
-  const degreesOfFreedom = pooled.length - 1 - 1
+  const degreesOfFreedom = pooled.length - 1 - (rateSource === 'estimated' ? 1 : 0)
   if (degreesOfFreedom < 1) {
     throw new Error('För få kategorier återstår efter sammanslagning för ett Poisson-chi-två-test.')
   }
@@ -83,7 +86,8 @@ export function poissonGoodnessOfFit(
 
   return {
     count,
-    estimatedRate,
+    rate,
+    rateSource,
     categories: pooled.map((category, index) =>
       formatCategory(category, index === pooled.length - 1),
     ),

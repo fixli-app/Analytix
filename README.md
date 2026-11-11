@@ -50,7 +50,7 @@ npm run build
 - Quality menu: crossed Gage R&R using balanced two-way ANOVA with interaction, variance components, %contribution, %study variation, optional %tolerance, and ndc; balanced complete data are required.
 - Statistics menu: two-sided Kolmogorov-Smirnov test against a fully specified normal distribution; μ and σ are supplied by the user.
 - Statistics menu: Anderson-Darling normality test with estimated sample mean/standard deviation, Stephens-adjusted statistic, p-value approximation, and selectable α; at least 8 complete observations are required.
-- Statistics menu: Poisson goodness-of-fit for nonnegative integer counts, with λ estimated from the sample mean and adjacent low-expected-count classes pooled.
+- Statistics menu: Poisson goodness-of-fit for nonnegative integer counts, with estimated or specified λ, adjacent low-expected-count classes pooled, and degrees of freedom adjusted for estimation.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.

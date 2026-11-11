@@ -9,7 +9,7 @@ interface PoissonGoodnessOfFitDialogProps {
   columns: SheetColumn[]
   language: string
   onOpenChange: (open: boolean) => void
-  onSubmit: (columnId: string, alpha: number) => void
+  onSubmit: (columnId: string, alpha: number, specifiedRate: number | null) => void
 }
 
 export function PoissonGoodnessOfFitDialog({
@@ -22,6 +22,8 @@ export function PoissonGoodnessOfFitDialog({
 }: PoissonGoodnessOfFitDialogProps) {
   const [columnId, setColumnId] = useState(initialColumn)
   const [alpha, setAlpha] = useState('0.05')
+  const [rateMode, setRateMode] = useState<'estimate' | 'specified'>('estimate')
+  const [rate, setRate] = useState('2')
   const isSwedish = language === 'sv'
   const selectedColumn = columns.some((column) => column.id === columnId)
     ? columnId
@@ -30,15 +32,17 @@ export function PoissonGoodnessOfFitDialog({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const significance = Number(alpha)
+    const specifiedRate = rateMode === 'specified' ? Number(rate) : null
     if (
       !selectedColumn ||
       !Number.isFinite(significance) ||
       significance <= 0 ||
-      significance >= 1
+      significance >= 1 ||
+      (specifiedRate !== null && (!Number.isFinite(specifiedRate) || specifiedRate <= 0))
     ) {
       return
     }
-    onSubmit(selectedColumn, significance)
+    onSubmit(selectedColumn, significance, specifiedRate)
     onOpenChange(false)
   }
 
@@ -79,6 +83,33 @@ export function PoissonGoodnessOfFitDialog({
                 ))}
               </select>
             </label>
+            <label className="dialog-field">
+              <span>{isSwedish ? 'Poisson-hastighet λ' : 'Poisson rate λ'}</span>
+              <select
+                value={rateMode}
+                onChange={(event) => setRateMode(event.target.value as 'estimate' | 'specified')}
+              >
+                <option value="estimate">
+                  {isSwedish ? 'Skatta från medelvärdet' : 'Estimate from sample mean'}
+                </option>
+                <option value="specified">
+                  {isSwedish ? 'Ange λ under H₀' : 'Specify λ under H₀'}
+                </option>
+              </select>
+            </label>
+            {rateMode === 'specified' && (
+              <label className="dialog-field">
+                <span>{isSwedish ? 'Specificerad λ' : 'Specified λ'}</span>
+                <input
+                  type="number"
+                  min="0.000001"
+                  step="any"
+                  value={rate}
+                  onChange={(event) => setRate(event.target.value)}
+                  required
+                />
+              </label>
+            )}
             <label className="dialog-field">
               <span>{isSwedish ? 'Signifikansnivå (α)' : 'Significance level (α)'}</span>
               <input

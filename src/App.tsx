@@ -898,7 +898,11 @@ function App() {
     }
   }
 
-  async function runPoissonGoodnessOfFitAnalysis(columnId: string, alpha: number) {
+  async function runPoissonGoodnessOfFitAnalysis(
+    columnId: string,
+    alpha: number,
+    specifiedRate: number | null,
+  ) {
     const column = columns.find((item) => item.id === columnId)
     if (!column || column.type !== 'numeric') {
       setToast('Välj en numerisk räkningskolumn för Poisson goodness-of-fit.')
@@ -910,11 +914,14 @@ function App() {
     })
     try {
       const [result, summary] = await Promise.all([
-        statsWorker.poissonGoodnessOfFit(values, alpha),
+        statsWorker.poissonGoodnessOfFit(values, alpha, 5, specifiedRate),
         statsWorker.describe(values),
       ])
       setSession({
-        title: 'Poisson goodness-of-fit',
+        title:
+          specifiedRate === null
+            ? 'Poisson goodness-of-fit (λ skattad)'
+            : 'Poisson goodness-of-fit (λ specificerad)',
         columnName: column.name,
         summary,
         poissonGoodnessOfFit: result,
@@ -1398,7 +1405,7 @@ function App() {
                             : session.chiSquareGoodnessOfFit
                               ? `\nχ²: ${formatValue(session.chiSquareGoodnessOfFit.statistic)}\ndf: ${session.chiSquareGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquareGoodnessOfFit.pValue, language)}\nKategorier: ${session.chiSquareGoodnessOfFit.categories.join(', ')}`
                               : session.poissonGoodnessOfFit
-                                ? `\nλ skattad: ${formatValue(session.poissonGoodnessOfFit.estimatedRate)}\nχ²: ${formatValue(session.poissonGoodnessOfFit.statistic)}\ndf: ${session.poissonGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.poissonGoodnessOfFit.pValue, language)}`
+                                ? `\nλ (${session.poissonGoodnessOfFit.rateSource}): ${formatValue(session.poissonGoodnessOfFit.rate)}\nχ²: ${formatValue(session.poissonGoodnessOfFit.statistic)}\ndf: ${session.poissonGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.poissonGoodnessOfFit.pValue, language)}`
                                 : session.fisherExact
                                   ? `\nFishers tvåsidiga p-värde: ${formatPValue(session.fisherExact.pValue, language)}\nOddskvot: ${session.fisherExact.oddsRatio === null ? 'odefinierad' : formatValue(session.fisherExact.oddsRatio)}`
                                   : session.processCapability
@@ -2734,8 +2741,18 @@ function App() {
                   </div>
                   <div className="stat-grid t-test-grid">
                     <div className="stat-cell">
-                      <span>λ̂</span>
-                      <strong>{formatValue(session.poissonGoodnessOfFit.estimatedRate)}</strong>
+                      <span>
+                        λ (
+                        {session.poissonGoodnessOfFit.rateSource === 'estimated'
+                          ? language === 'sv'
+                            ? 'skattad'
+                            : 'estimated'
+                          : language === 'sv'
+                            ? 'specificerad'
+                            : 'specified'}
+                        )
+                      </span>
+                      <strong>{formatValue(session.poissonGoodnessOfFit.rate)}</strong>
                     </div>
                     <div className="stat-cell">
                       <span>χ²</span>
@@ -2761,8 +2778,8 @@ function App() {
                   </p>
                   <p className="session-caption">
                     {language === 'sv'
-                      ? `λ skattas från medelvärdet. Klasser har slagits samman intill varandra till förväntat antal ≥ 5; skattningen av λ drar av en frihetsgrad. χ²-approximationens giltighet och referensvärden är inte externt verifierade.`
-                      : `λ is estimated by the mean. Adjacent classes are pooled to expected counts ≥ 5; estimating λ costs one degree of freedom. The chi-square approximation and reference values are not independently verified.`}
+                      ? `${session.poissonGoodnessOfFit.rateSource === 'estimated' ? 'λ skattas från medelvärdet och en frihetsgrad dras av.' : 'λ anges under nollhypotesen och inga parametrar skattas.'} Klasser har slagits samman intill varandra till förväntat antal ≥ 5; χ²-approximationens giltighet och referensvärden är inte externt verifierade.`
+                      : `${session.poissonGoodnessOfFit.rateSource === 'estimated' ? 'λ is estimated by the mean and one degree of freedom is subtracted.' : 'λ is specified under the null hypothesis; no parameter is estimated.'} Adjacent classes are pooled to expected counts ≥ 5; the chi-square approximation and reference values are not independently verified.`}
                   </p>
                 </section>
               )}
@@ -3411,8 +3428,8 @@ function App() {
         columns={numericColumns}
         language={language}
         onOpenChange={setPoissonGoodnessOfFitDialogOpen}
-        onSubmit={(columnId, alpha) => {
-          void runPoissonGoodnessOfFitAnalysis(columnId, alpha)
+        onSubmit={(columnId, alpha, specifiedRate) => {
+          void runPoissonGoodnessOfFitAnalysis(columnId, alpha, specifiedRate)
         }}
       />
       <ChiSquareDialog
