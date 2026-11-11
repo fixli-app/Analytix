@@ -22,6 +22,7 @@ import { buildGraph } from '../charts/graphData'
 import { crossedGageRr } from '../quality/gageRr'
 import { subgroupControlChart } from '../quality/subgroupControlChart'
 import { normalAndersonDarling } from '../stats/normalAndersonDarling'
+import { poissonGoodnessOfFit } from '../stats/poissonGoodnessOfFit'
 
 const api = {
   describe,
@@ -47,6 +48,7 @@ const api = {
   crossedGageRr,
   subgroupControlChart,
   normalAndersonDarling,
+  poissonGoodnessOfFit,
 }
 
 export type StatsWorker = typeof api

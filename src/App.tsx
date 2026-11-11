@@ -58,6 +58,7 @@ import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
 import type { OneSampleZResult } from './stats/oneSampleZ'
 import type { NormalKsResult } from './stats/normalKs'
 import type { AndersonDarlingNormalResult } from './stats/normalAndersonDarling'
+import type { PoissonGoodnessOfFitResult } from './stats/poissonGoodnessOfFit'
 import type { ChiSquareIndependenceResult } from './stats/chiSquare'
 import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFit'
 import type { FisherExactResult } from './stats/fisherExact'
@@ -79,6 +80,7 @@ import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog
 import { OneSampleZDialog } from './dialogs/OneSampleZDialog'
 import { NormalKSDialog } from './dialogs/NormalKSDialog'
 import { AndersonDarlingDialog } from './dialogs/AndersonDarlingDialog'
+import { PoissonGoodnessOfFitDialog } from './dialogs/PoissonGoodnessOfFitDialog'
 import { ChiSquareDialog } from './dialogs/ChiSquareDialog'
 import { ChiSquareGoodnessOfFitDialog } from './dialogs/ChiSquareGoodnessOfFitDialog'
 import { FisherExactDialog } from './dialogs/FisherExactDialog'
@@ -134,6 +136,7 @@ const menuContent: Record<string, string[]> = {
     'twoSamplePoissonRate',
     'compareVariances',
     'normalAD',
+    'poissonGOF',
     'normalKS',
     'chiSquare',
     'chiSquareUniform',
@@ -171,6 +174,7 @@ const actionLabelKeys: Record<string, string> = {
   compareVariances: 'compareVariances',
   normalKS: 'normalKS',
   normalAD: 'normalAD',
+  poissonGOF: 'poissonGOF',
   chiSquare: 'chiSquare',
   chiSquareUniform: 'chiSquareUniform',
   fisherExact: 'fisherExact',
@@ -190,6 +194,7 @@ interface SessionResult {
   oneSampleZ?: OneSampleZResult
   normalKS?: NormalKsResult
   normalAD?: AndersonDarlingNormalResult
+  poissonGoodnessOfFit?: PoissonGoodnessOfFitResult
   chiSquare?: ChiSquareIndependenceResult
   chiSquareGoodnessOfFit?: ChiSquareGoodnessOfFitResult
   fisherExact?: FisherExactResult
@@ -359,6 +364,7 @@ function App() {
   const [oneSampleZDialogOpen, setOneSampleZDialogOpen] = useState(false)
   const [normalKSDialogOpen, setNormalKSDialogOpen] = useState(false)
   const [normalADDialogOpen, setNormalADDialogOpen] = useState(false)
+  const [poissonGoodnessOfFitDialogOpen, setPoissonGoodnessOfFitDialogOpen] = useState(false)
   const [chiSquareDialogOpen, setChiSquareDialogOpen] = useState(false)
   const [chiSquareGoodnessOfFitDialogOpen, setChiSquareGoodnessOfFitDialogOpen] = useState(false)
   const [fisherExactDialogOpen, setFisherExactDialogOpen] = useState(false)
@@ -892,6 +898,33 @@ function App() {
     }
   }
 
+  async function runPoissonGoodnessOfFitAnalysis(columnId: string, alpha: number) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk räkningskolumn för Poisson goodness-of-fit.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.poissonGoodnessOfFit(values, alpha),
+        statsWorker.describe(values),
+      ])
+      setSession({
+        title: 'Poisson goodness-of-fit',
+        columnName: column.name,
+        summary,
+        poissonGoodnessOfFit: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Poisson goodness-of-fit kunde inte köras.')
+    }
+  }
+
   async function runFisherExact(columnId1: string, columnId2: string) {
     const column1 = columns.find((item) => item.id === columnId1)
     const column2 = columns.find((item) => item.id === columnId2)
@@ -1234,6 +1267,7 @@ function App() {
     else if (action === 'twoSampleZ') setTwoSampleZDialogOpen(true)
     else if (action === 'normalKS') setNormalKSDialogOpen(true)
     else if (action === 'normalAD') setNormalADDialogOpen(true)
+    else if (action === 'poissonGOF') setPoissonGoodnessOfFitDialogOpen(true)
     else if (action === 'chiSquare') setChiSquareDialogOpen(true)
     else if (action === 'chiSquareUniform') setChiSquareGoodnessOfFitDialogOpen(true)
     else if (action === 'fisherExact') setFisherExactDialogOpen(true)
@@ -1363,23 +1397,25 @@ function App() {
                             ? `\nχ²: ${formatValue(session.chiSquare.statistic)}\ndf: ${session.chiSquare.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquare.pValue, language)}\nCramér V: ${formatValue(session.chiSquare.cramersV)}`
                             : session.chiSquareGoodnessOfFit
                               ? `\nχ²: ${formatValue(session.chiSquareGoodnessOfFit.statistic)}\ndf: ${session.chiSquareGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.chiSquareGoodnessOfFit.pValue, language)}\nKategorier: ${session.chiSquareGoodnessOfFit.categories.join(', ')}`
-                              : session.fisherExact
-                                ? `\nFishers tvåsidiga p-värde: ${formatPValue(session.fisherExact.pValue, language)}\nOddskvot: ${session.fisherExact.oddsRatio === null ? 'odefinierad' : formatValue(session.fisherExact.oddsRatio)}`
-                                : session.processCapability
-                                  ? `\nCp/Cpk: ${formatValue(session.processCapability.cp)} / ${formatValue(session.processCapability.cpk)}\nPp/Ppk: ${formatValue(session.processCapability.pp)} / ${formatValue(session.processCapability.ppk)}\nZ-bench inom: ${formatValue(session.processCapability.zBenchWithin)}\nObserverade PPM: ${formatValue(session.processCapability.observedPpm)}\nFörväntade PPM (normal): ${formatValue(session.processCapability.expectedOverallPpm)}`
-                                  : session.imrControlChart
-                                    ? `\nI-centrum: ${formatValue(session.imrControlChart.individuals.centerLine)}\nI-LCL/UCL: ${formatValue(session.imrControlChart.individuals.lowerControlLimit)} / ${formatValue(session.imrControlChart.individuals.upperControlLimit)}\nMR̄: ${formatValue(session.imrControlChart.averageMovingRange)}\nMR-UCL: ${formatValue(session.imrControlChart.movingRange.upperControlLimit)}\nRegelsignaler: ${session.imrControlChart.signals.length}`
-                                    : session.graph
-                                      ? `\nDiagram: ${session.graph.title}\nn: ${session.graph.sampleCount}`
-                                      : session.gageRr
-                                        ? `\nGage R&R: ${formatValue(session.gageRr.percentStudyVariation.gageRr)} % study variation\n% contribution: ${formatValue(session.gageRr.percentContribution.gageRr)}\nndc: ${session.gageRr.numberOfDistinctCategories}`
-                                        : session.subgroupControlChart
-                                          ? `\nSubgrupper: ${session.subgroupControlChart.subgroupCount}\nn/subgrupp: ${session.subgroupControlChart.subgroupSize}\nXbar-centrum: ${formatValue(session.subgroupControlChart.xbar.centerLine)}\n${session.subgroupControlChart.variabilityChart.toUpperCase()}-centrum: ${formatValue(session.subgroupControlChart.variability.centerLine)}\nRegelsignaler: ${session.subgroupControlChart.signals.length}`
-                                          : session.normalAD
-                                            ? `\nA²: ${formatValue(session.normalAD.statistic)}\nJusterad A²: ${formatValue(session.normalAD.adjustedStatistic)}\np-värde: ${formatPValue(session.normalAD.pValue, language)}\nα: ${formatValue(session.normalAD.alpha)}`
-                                            : session.normalKS
-                                              ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                              : ''
+                              : session.poissonGoodnessOfFit
+                                ? `\nλ skattad: ${formatValue(session.poissonGoodnessOfFit.estimatedRate)}\nχ²: ${formatValue(session.poissonGoodnessOfFit.statistic)}\ndf: ${session.poissonGoodnessOfFit.degreesOfFreedom}\np-värde: ${formatPValue(session.poissonGoodnessOfFit.pValue, language)}`
+                                : session.fisherExact
+                                  ? `\nFishers tvåsidiga p-värde: ${formatPValue(session.fisherExact.pValue, language)}\nOddskvot: ${session.fisherExact.oddsRatio === null ? 'odefinierad' : formatValue(session.fisherExact.oddsRatio)}`
+                                  : session.processCapability
+                                    ? `\nCp/Cpk: ${formatValue(session.processCapability.cp)} / ${formatValue(session.processCapability.cpk)}\nPp/Ppk: ${formatValue(session.processCapability.pp)} / ${formatValue(session.processCapability.ppk)}\nZ-bench inom: ${formatValue(session.processCapability.zBenchWithin)}\nObserverade PPM: ${formatValue(session.processCapability.observedPpm)}\nFörväntade PPM (normal): ${formatValue(session.processCapability.expectedOverallPpm)}`
+                                    : session.imrControlChart
+                                      ? `\nI-centrum: ${formatValue(session.imrControlChart.individuals.centerLine)}\nI-LCL/UCL: ${formatValue(session.imrControlChart.individuals.lowerControlLimit)} / ${formatValue(session.imrControlChart.individuals.upperControlLimit)}\nMR̄: ${formatValue(session.imrControlChart.averageMovingRange)}\nMR-UCL: ${formatValue(session.imrControlChart.movingRange.upperControlLimit)}\nRegelsignaler: ${session.imrControlChart.signals.length}`
+                                      : session.graph
+                                        ? `\nDiagram: ${session.graph.title}\nn: ${session.graph.sampleCount}`
+                                        : session.gageRr
+                                          ? `\nGage R&R: ${formatValue(session.gageRr.percentStudyVariation.gageRr)} % study variation\n% contribution: ${formatValue(session.gageRr.percentContribution.gageRr)}\nndc: ${session.gageRr.numberOfDistinctCategories}`
+                                          : session.subgroupControlChart
+                                            ? `\nSubgrupper: ${session.subgroupControlChart.subgroupCount}\nn/subgrupp: ${session.subgroupControlChart.subgroupSize}\nXbar-centrum: ${formatValue(session.subgroupControlChart.xbar.centerLine)}\n${session.subgroupControlChart.variabilityChart.toUpperCase()}-centrum: ${formatValue(session.subgroupControlChart.variability.centerLine)}\nRegelsignaler: ${session.subgroupControlChart.signals.length}`
+                                            : session.normalAD
+                                              ? `\nA²: ${formatValue(session.normalAD.statistic)}\nJusterad A²: ${formatValue(session.normalAD.adjustedStatistic)}\np-värde: ${formatPValue(session.normalAD.pValue, language)}\nα: ${formatValue(session.normalAD.alpha)}`
+                                              : session.normalKS
+                                                ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                                : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2666,6 +2702,70 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.poissonGoodnessOfFit && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv'
+                      ? 'Poisson goodness-of-fit-resultat'
+                      : 'Poisson goodness-of-fit result'
+                  }
+                >
+                  <h4>Poisson goodness-of-fit</h4>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Räkningsklass' : 'Count class'}</th>
+                          <th scope="col">{language === 'sv' ? 'Observerad' : 'Observed'}</th>
+                          <th scope="col">{language === 'sv' ? 'Förväntad' : 'Expected'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.poissonGoodnessOfFit.categories.map((category, index) => (
+                          <tr key={category}>
+                            <th scope="row">{category}</th>
+                            <td>{session.poissonGoodnessOfFit!.observed[index]}</td>
+                            <td>{formatValue(session.poissonGoodnessOfFit.expected[index])}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>λ̂</span>
+                      <strong>{formatValue(session.poissonGoodnessOfFit.estimatedRate)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>χ²</span>
+                      <strong>{formatValue(session.poissonGoodnessOfFit.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Frihetsgrader' : 'Degrees of freedom'}</span>
+                      <strong>{session.poissonGoodnessOfFit.degreesOfFreedom}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.poissonGoodnessOfFit.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.poissonGoodnessOfFit.alpha)}</strong>
+                    </div>
+                  </div>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `${session.poissonGoodnessOfFit.pValue < session.poissonGoodnessOfFit.alpha ? 'Förkasta' : 'Förkasta inte'} H₀ att räknedata följer en Poissonfördelning.`
+                      : `${session.poissonGoodnessOfFit.pValue < session.poissonGoodnessOfFit.alpha ? 'Reject' : 'Do not reject'} H₀ that the counts follow a Poisson distribution.`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `λ skattas från medelvärdet. Klasser har slagits samman intill varandra till förväntat antal ≥ 5; skattningen av λ drar av en frihetsgrad. χ²-approximationens giltighet och referensvärden är inte externt verifierade.`
+                      : `λ is estimated by the mean. Adjacent classes are pooled to expected counts ≥ 5; estimating λ costs one degree of freedom. The chi-square approximation and reference values are not independently verified.`}
+                  </p>
+                </section>
+              )}
               {session.fisherExact && (
                 <section
                   className="t-test-result"
@@ -3118,12 +3218,14 @@ function App() {
               {session.summary && (
                 <>
                   <p className="session-caption">
-                    Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation.
-                    Saknade värden uteslöts.
+                    {language === 'sv'
+                      ? 'Stickprovsstandardavvikelse med Welford. Kvartiler med R-7-interpolation. Saknade värden uteslöts.'
+                      : 'Sample standard deviation uses Welford. Quartiles use R-7 interpolation. Missing values were omitted.'}
                   </p>
                   <p className="session-caption">
-                    Beskrivande statistik sammanfattar fördelningen; ingen hypotesprövning har
-                    utförts.
+                    {language === 'sv'
+                      ? 'Den deskriptiva sammanfattningen visas som stöd till analysresultatet.'
+                      : 'The descriptive summary is shown as supporting context for the analysis result.'}
                   </p>
                 </>
               )}
@@ -3301,6 +3403,16 @@ function App() {
         onOpenChange={setNormalADDialogOpen}
         onSubmit={(columnId, alpha) => {
           void runNormalADAnalysis(columnId, alpha)
+        }}
+      />
+      <PoissonGoodnessOfFitDialog
+        open={poissonGoodnessOfFitDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setPoissonGoodnessOfFitDialogOpen}
+        onSubmit={(columnId, alpha) => {
+          void runPoissonGoodnessOfFitAnalysis(columnId, alpha)
         }}
       />
       <ChiSquareDialog

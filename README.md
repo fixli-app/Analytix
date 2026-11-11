@@ -50,6 +50,7 @@ npm run build
 - Quality menu: crossed Gage R&R using balanced two-way ANOVA with interaction, variance components, %contribution, %study variation, optional %tolerance, and ndc; balanced complete data are required.
 - Statistics menu: two-sided Kolmogorov-Smirnov test against a fully specified normal distribution; μ and σ are supplied by the user.
 - Statistics menu: Anderson-Darling normality test with estimated sample mean/standard deviation, Stephens-adjusted statistic, p-value approximation, and selectable α; at least 8 complete observations are required.
+- Statistics menu: Poisson goodness-of-fit for nonnegative integer counts, with λ estimated from the sample mean and adjacent low-expected-count classes pooled.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -80,6 +81,7 @@ npm run build
 | I-MR control charts                                                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/imrControlChart.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` limits, out-of-control and run-rule fixtures; external reference comparison remains                   |
 | Xbar-R/Xbar-S subgroup charts                                                                         | Implemented; not independently reference-verified | `src/quality/__tests__/subgroupControlChart.test.ts`; hand-calculated n=2 Xbar-R and n=4 Xbar-S limits; complete balanced groups required; browser-rendered both chart pairs           |
 | Anderson-Darling normality test                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/normalAndersonDarling.test.ts`; order/missingness, strong-deviation and invalid-sample fixtures; Stephens p-value approximation remains unverified                |
+| Poisson goodness-of-fit                                                                               | Implemented; not independently reference-verified | `src/stats/__tests__/poissonGoodnessOfFit.test.ts`; λ=2 count fixture, adjacent pooling, adjusted df and invalid count cases; chi-square approximation remains unverified              |
 | General-purpose graphs (9 types)                                                                      | Implemented; browser-rendering checked            | `src/charts/__tests__/graphData.test.ts`; grouped data, paired missingness, frequency/Pareto aggregation, ECDF and normal Q-Q fixtures; graph browser checks remain                    |
 | DPU/PPM/DPMO and sigma-level calculator                                                               | Implemented; not independently reference-verified | `src/quality/__tests__/defectMetrics.test.ts`; hand-calculated 100-unit fixture and input validation; sigma shift is user-selectable                                                   |
 | FMEA risk-priority number                                                                             | Implemented; formula fixture checked              | `src/quality/__tests__/fmea.test.ts`; RPN = severity × occurrence × detection on 1–10 integer scales; no universal RPN threshold is implied                                            |
@@ -92,7 +94,7 @@ The test-summary paragraph above is the graph-builder baseline. The current suit
 
 The test-summary paragraph above is the quality-toolkit baseline. The current suite has 98 tests, including the crossed Gage R&R model and its balanced-design validation fixture.
 
-Latest suite update: 108 tests, including crossed Gage R&R, balanced Xbar-R/Xbar-S subgroup fixtures, Anderson-Darling and normal Q-Q data-model tests.
+Latest suite update: 111 tests, including crossed Gage R&R, balanced Xbar-R/Xbar-S subgroup fixtures, Anderson-Darling, normal Q-Q, and Poisson GOF.
 
 ## Architecture
 
