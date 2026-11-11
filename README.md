@@ -45,9 +45,11 @@ npm run build
 - Graphs menu: interactive I-MR control charts with individuals and moving-range panels, 3σ control limits, beyond-limit signals, and an eight-points-on-one-side run rule.
 - Quality menu: Xbar-R and Xbar-S subgroup charts for balanced subgroups of size 2–10, with three-sigma limits and beyond-limit signals.
 - Graphs menu: histogram, grouped/ungrouped boxplot and individual-value plot, scatterplot, frequency bar chart, Pareto with cumulative percentage, empirical CDF, and row-ordered time series; Plotly loads on demand and provides toolbar image export.
+- Graphs menu: normal Q-Q plot with Blom plotting positions and a fitted normal reference line.
 - Quality menu: locally saved DMAIC phase checklist/notes, SIPOC worksheet, 6M Ishikawa cause categories, five-why root-cause chain, editable FMEA with validated S/O/D scoring and RPN, check sheet, and DPU/PPM/DPMO/yield/sigma-level calculator.
 - Quality menu: crossed Gage R&R using balanced two-way ANOVA with interaction, variance components, %contribution, %study variation, optional %tolerance, and ndc; balanced complete data are required.
 - Statistics menu: two-sided Kolmogorov-Smirnov test against a fully specified normal distribution; μ and σ are supplied by the user.
+- Statistics menu: Anderson-Darling normality test with estimated sample mean/standard deviation, Stephens-adjusted statistic, p-value approximation, and selectable α; at least 8 complete observations are required.
 - CSV and XLSX import; CSV export; JSON `.statlab` project open/save; browser IndexedDB autosave.
 - Swedish default language with an English toggle; light/dark theme.
 - Worker-backed descriptive summary: count, mean, median, sample standard deviation, variance, standard error, R-7 quartiles, range, minimum, and maximum. Missing/non-finite observations are excluded; an empty numeric sample returns a readable error.
@@ -77,7 +79,8 @@ npm run build
 | Normal process capability (individual measurements)                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/processCapability.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` fixture; within SD uses moving range/1.128; stability and normality remain unchecked                |
 | I-MR control charts                                                                                   | Implemented; not independently reference-verified | `src/stats/__tests__/imrControlChart.test.ts`; hand-calculated `[1, 2, 3, 4, 5]` limits, out-of-control and run-rule fixtures; external reference comparison remains                   |
 | Xbar-R/Xbar-S subgroup charts                                                                         | Implemented; not independently reference-verified | `src/quality/__tests__/subgroupControlChart.test.ts`; hand-calculated n=2 Xbar-R and n=4 Xbar-S limits; complete balanced groups required; browser-rendered both chart pairs           |
-| General-purpose graphs (8 types)                                                                      | Implemented; browser-rendering checked            | `src/charts/__tests__/graphData.test.ts`; grouped data, paired missingness, frequency/Pareto aggregation, ECDF ordering; all eight plot titles and mobile width checked in browser     |
+| Anderson-Darling normality test                                                                       | Implemented; not independently reference-verified | `src/stats/__tests__/normalAndersonDarling.test.ts`; order/missingness, strong-deviation and invalid-sample fixtures; Stephens p-value approximation remains unverified                |
+| General-purpose graphs (9 types)                                                                      | Implemented; browser-rendering checked            | `src/charts/__tests__/graphData.test.ts`; grouped data, paired missingness, frequency/Pareto aggregation, ECDF and normal Q-Q fixtures; graph browser checks remain                    |
 | DPU/PPM/DPMO and sigma-level calculator                                                               | Implemented; not independently reference-verified | `src/quality/__tests__/defectMetrics.test.ts`; hand-calculated 100-unit fixture and input validation; sigma shift is user-selectable                                                   |
 | FMEA risk-priority number                                                                             | Implemented; formula fixture checked              | `src/quality/__tests__/fmea.test.ts`; RPN = severity × occurrence × detection on 1–10 integer scales; no universal RPN threshold is implied                                            |
 | Crossed Gage R&R                                                                                      | Implemented; not independently reference-verified | `src/quality/__tests__/gageRr.test.ts`; balanced fixture with known variance components and incomplete/unbalanced-design checks; normality and independence remain unchecked           |
@@ -89,7 +92,7 @@ The test-summary paragraph above is the graph-builder baseline. The current suit
 
 The test-summary paragraph above is the quality-toolkit baseline. The current suite has 98 tests, including the crossed Gage R&R model and its balanced-design validation fixture.
 
-Latest suite update: 103 tests, including crossed Gage R&R and balanced Xbar-R/Xbar-S subgroup fixtures.
+Latest suite update: 108 tests, including crossed Gage R&R, balanced Xbar-R/Xbar-S subgroup fixtures, Anderson-Darling and normal Q-Q data-model tests.
 
 ## Architecture
 

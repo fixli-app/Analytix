@@ -1,5 +1,15 @@
+import jStat from 'jstat'
+
 export type GraphKind =
-  'histogram' | 'boxplot' | 'individual' | 'scatter' | 'bar' | 'pareto' | 'ecdf' | 'timeSeries'
+  | 'histogram'
+  | 'boxplot'
+  | 'individual'
+  | 'scatter'
+  | 'bar'
+  | 'pareto'
+  | 'ecdf'
+  | 'normalQQ'
+  | 'timeSeries'
 
 export interface GraphTrace {
   type: 'histogram' | 'box' | 'scatter' | 'bar'
@@ -154,6 +164,30 @@ export function buildGraph(input: GraphInput): GraphModel {
         },
       ])
     }
+    case 'normalQQ': {
+      requireNumeric(numeric)
+      const ordered = [...numeric].sort((left, right) => left - right)
+      const { mean, standardDeviation } = numericSummary(ordered)
+      const theoreticalQuantiles = ordered.map((_, index) =>
+        jStat.normal.inv((index + 0.625) / (ordered.length + 0.25), 0, 1),
+      )
+      return model(input.kind, isSwedish, ordered.length, [
+        {
+          type: 'scatter',
+          mode: 'markers',
+          name: isSwedish ? 'Observerade kvantiler' : 'Observed quantiles',
+          x: theoreticalQuantiles,
+          y: ordered,
+        },
+        {
+          type: 'scatter',
+          mode: 'lines',
+          name: isSwedish ? 'Normal referenslinje' : 'Normal reference line',
+          x: theoreticalQuantiles,
+          y: theoreticalQuantiles.map((quantile) => mean + quantile * standardDeviation),
+        },
+      ])
+    }
     case 'timeSeries': {
       const observations = (input.values ?? [])
         .map((value, index) => ({ value, observation: index + 1 }))
@@ -220,6 +254,11 @@ function model(
       isSwedish ? 'Mätvärde' : 'Measurement',
       'F(x)',
     ],
+    normalQQ: [
+      isSwedish ? 'Normal Q-Q-diagram' : 'Normal Q-Q plot',
+      isSwedish ? 'Teoretisk normal kvantil' : 'Theoretical normal quantile',
+      isSwedish ? 'Observerad kvantil' : 'Observed quantile',
+    ],
     timeSeries: [
       isSwedish ? 'Tidsseriediagram' : 'Time series plot',
       isSwedish ? 'Observation' : 'Observation',
@@ -228,6 +267,20 @@ function model(
   }
   const [title, xTitle, yTitle] = labels[kind]
   return { kind, title, xTitle, yTitle, sampleCount, data, cumulativeAxis: kind === 'pareto' }
+}
+
+function numericSummary(values: readonly number[]) {
+  let mean = 0
+  let sumSquaredDifferences = 0
+  values.forEach((value, index) => {
+    const delta = value - mean
+    mean += delta / (index + 1)
+    sumSquaredDifferences += delta * (value - mean)
+  })
+  return {
+    mean,
+    standardDeviation: Math.sqrt(sumSquaredDifferences / (values.length - 1)),
+  }
 }
 
 function numericValues(values: readonly (number | null | undefined)[]): number[] {

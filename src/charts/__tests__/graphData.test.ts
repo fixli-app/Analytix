@@ -70,6 +70,21 @@ describe('buildGraph', () => {
     expect(timeSeries.data[0]).toMatchObject({ x: [1, 3], y: [4, 8] })
   })
 
+  it('builds normal Q-Q points and a fitted reference line', () => {
+    const graph = buildGraph({ kind: 'normalQQ', values: [8, 1, 4, 2, 6, 3, 5, 7], language: 'en' })
+    const points = graph.data[0]
+    const reference = graph.data[1]
+
+    expect(graph.title).toBe('Normal Q-Q plot')
+    expect(graph.sampleCount).toBe(8)
+    expect(points.y).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(points.x).toEqual([...points.x!].sort((left, right) => Number(left) - Number(right)))
+    expect(reference.x).toEqual(points.x)
+    expect(reference.y).toHaveLength(8)
+    expect(reference.y![0]).toBeLessThan(4.5)
+    expect(reference.y![7]).toBeGreaterThan(4.5)
+  })
+
   it('rejects empty and non-finite input', () => {
     expect(() => buildGraph({ kind: 'histogram', values: [null], language: 'sv' })).toThrow(
       'Minst ett numeriskt värde krävs för diagrammet.',

@@ -21,6 +21,7 @@ import { imrControlChart } from '../stats/imrControlChart'
 import { buildGraph } from '../charts/graphData'
 import { crossedGageRr } from '../quality/gageRr'
 import { subgroupControlChart } from '../quality/subgroupControlChart'
+import { normalAndersonDarling } from '../stats/normalAndersonDarling'
 
 const api = {
   describe,
@@ -45,6 +46,7 @@ const api = {
   buildGraph,
   crossedGageRr,
   subgroupControlChart,
+  normalAndersonDarling,
 }
 
 export type StatsWorker = typeof api

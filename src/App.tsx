@@ -57,6 +57,7 @@ import type { CorrelationResult } from './stats/correlation'
 import type { OneSamplePoissonRateResult } from './stats/oneSamplePoissonRate'
 import type { OneSampleZResult } from './stats/oneSampleZ'
 import type { NormalKsResult } from './stats/normalKs'
+import type { AndersonDarlingNormalResult } from './stats/normalAndersonDarling'
 import type { ChiSquareIndependenceResult } from './stats/chiSquare'
 import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFit'
 import type { FisherExactResult } from './stats/fisherExact'
@@ -77,6 +78,7 @@ import { CorrelationDialog } from './dialogs/CorrelationDialog'
 import { OneSamplePoissonRateDialog } from './dialogs/OneSamplePoissonRateDialog'
 import { OneSampleZDialog } from './dialogs/OneSampleZDialog'
 import { NormalKSDialog } from './dialogs/NormalKSDialog'
+import { AndersonDarlingDialog } from './dialogs/AndersonDarlingDialog'
 import { ChiSquareDialog } from './dialogs/ChiSquareDialog'
 import { ChiSquareGoodnessOfFitDialog } from './dialogs/ChiSquareGoodnessOfFitDialog'
 import { FisherExactDialog } from './dialogs/FisherExactDialog'
@@ -131,6 +133,7 @@ const menuContent: Record<string, string[]> = {
     'oneSamplePoissonRate',
     'twoSamplePoissonRate',
     'compareVariances',
+    'normalAD',
     'normalKS',
     'chiSquare',
     'chiSquareUniform',
@@ -167,6 +170,7 @@ const actionLabelKeys: Record<string, string> = {
   twoSamplePoissonRate: 'twoSamplePoissonRate',
   compareVariances: 'compareVariances',
   normalKS: 'normalKS',
+  normalAD: 'normalAD',
   chiSquare: 'chiSquare',
   chiSquareUniform: 'chiSquareUniform',
   fisherExact: 'fisherExact',
@@ -185,6 +189,7 @@ interface SessionResult {
   oneSampleT?: OneSampleTResult
   oneSampleZ?: OneSampleZResult
   normalKS?: NormalKsResult
+  normalAD?: AndersonDarlingNormalResult
   chiSquare?: ChiSquareIndependenceResult
   chiSquareGoodnessOfFit?: ChiSquareGoodnessOfFitResult
   fisherExact?: FisherExactResult
@@ -353,6 +358,7 @@ function App() {
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
   const [oneSampleZDialogOpen, setOneSampleZDialogOpen] = useState(false)
   const [normalKSDialogOpen, setNormalKSDialogOpen] = useState(false)
+  const [normalADDialogOpen, setNormalADDialogOpen] = useState(false)
   const [chiSquareDialogOpen, setChiSquareDialogOpen] = useState(false)
   const [chiSquareGoodnessOfFitDialogOpen, setChiSquareGoodnessOfFitDialogOpen] = useState(false)
   const [fisherExactDialogOpen, setFisherExactDialogOpen] = useState(false)
@@ -645,6 +651,35 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Normalitetstestet kunde inte genomföras.')
+    }
+  }
+
+  async function runNormalADAnalysis(columnId: string, alpha: number) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast('Välj en numerisk kolumn för Anderson-Darling-testet.')
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[column.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const [result, summary] = await Promise.all([
+        statsWorker.normalAndersonDarling(values, alpha),
+        statsWorker.describe(values),
+      ])
+      setSession({
+        title: 'Anderson-Darling för normalitet',
+        columnName: column.name,
+        summary,
+        normalAD: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Anderson-Darling-testet kunde inte genomföras.',
+      )
     }
   }
 
@@ -1198,6 +1233,7 @@ function App() {
     else if (action === 'oneSampleZ') setOneSampleZDialogOpen(true)
     else if (action === 'twoSampleZ') setTwoSampleZDialogOpen(true)
     else if (action === 'normalKS') setNormalKSDialogOpen(true)
+    else if (action === 'normalAD') setNormalADDialogOpen(true)
     else if (action === 'chiSquare') setChiSquareDialogOpen(true)
     else if (action === 'chiSquareUniform') setChiSquareGoodnessOfFitDialogOpen(true)
     else if (action === 'fisherExact') setFisherExactDialogOpen(true)
@@ -1339,9 +1375,11 @@ function App() {
                                         ? `\nGage R&R: ${formatValue(session.gageRr.percentStudyVariation.gageRr)} % study variation\n% contribution: ${formatValue(session.gageRr.percentContribution.gageRr)}\nndc: ${session.gageRr.numberOfDistinctCategories}`
                                         : session.subgroupControlChart
                                           ? `\nSubgrupper: ${session.subgroupControlChart.subgroupCount}\nn/subgrupp: ${session.subgroupControlChart.subgroupSize}\nXbar-centrum: ${formatValue(session.subgroupControlChart.xbar.centerLine)}\n${session.subgroupControlChart.variabilityChart.toUpperCase()}-centrum: ${formatValue(session.subgroupControlChart.variability.centerLine)}\nRegelsignaler: ${session.subgroupControlChart.signals.length}`
-                                          : session.normalKS
-                                            ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                            : ''
+                                          : session.normalAD
+                                            ? `\nA²: ${formatValue(session.normalAD.statistic)}\nJusterad A²: ${formatValue(session.normalAD.adjustedStatistic)}\np-värde: ${formatPValue(session.normalAD.pValue, language)}\nα: ${formatValue(session.normalAD.alpha)}`
+                                            : session.normalKS
+                                              ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
+                                              : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
@@ -2421,6 +2459,59 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.normalAD && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Anderson-Darling-resultat' : 'Anderson-Darling result'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Anderson-Darling för normalitet'
+                      : 'Anderson-Darling normality test'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Kompletta värden' : 'Complete values'}</span>
+                      <strong>{session.normalAD.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>A²</span>
+                      <strong>{formatValue(session.normalAD.statistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Justerad A²' : 'Adjusted A²'}</span>
+                      <strong>{formatValue(session.normalAD.adjustedStatistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.normalAD.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.normalAD.alpha)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Skattat medel / s' : 'Estimated mean / s'}</span>
+                      <strong>
+                        {formatValue(session.normalAD.mean)} /{' '}
+                        {formatValue(session.normalAD.standardDeviation)}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="session-conclusion">
+                    {language === 'sv'
+                      ? `${session.normalAD.rejectNormality ? 'Förkasta' : 'Förkasta inte'} H₀ om normalfördelning vid α = ${formatValue(session.normalAD.alpha)}.`
+                      : `${session.normalAD.rejectNormality ? 'Reject' : 'Do not reject'} H₀ of normality at α = ${formatValue(session.normalAD.alpha)}.`}
+                  </p>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'P-värdet är Stephens approximation med medelvärde och standardavvikelse skattade från urvalet. Minst 8 observationer krävs. Resultatet är inte oberoende referensverifierat.'
+                      : 'The p-value uses the Stephens approximation with mean and standard deviation estimated from the sample. At least 8 observations are required. This result is not independently reference-verified.'}
+                  </p>
+                </section>
+              )}
               {session.chiSquare && (
                 <section
                   className="t-test-result"
@@ -3200,6 +3291,16 @@ function App() {
         onOpenChange={setNormalKSDialogOpen}
         onSubmit={(columnId, mean, standardDeviation) => {
           void runNormalKSAnalysis(columnId, mean, standardDeviation)
+        }}
+      />
+      <AndersonDarlingDialog
+        open={normalADDialogOpen}
+        initialColumn={targetColumn}
+        columns={numericColumns}
+        language={language}
+        onOpenChange={setNormalADDialogOpen}
+        onSubmit={(columnId, alpha) => {
+          void runNormalADAnalysis(columnId, alpha)
         }}
       />
       <ChiSquareDialog

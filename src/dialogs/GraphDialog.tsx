@@ -30,6 +30,7 @@ const graphKinds: GraphKind[] = [
   'bar',
   'pareto',
   'ecdf',
+  'normalQQ',
   'timeSeries',
 ]
 
@@ -216,6 +217,7 @@ function graphKindLabel(kind: GraphKind, isSwedish: boolean): string {
     bar: ['Stapeldiagram', 'Bar chart'],
     pareto: ['Pareto', 'Pareto'],
     ecdf: ['Empirisk fördelningsfunktion', 'Empirical CDF'],
+    normalQQ: ['Normal Q-Q-diagram', 'Normal Q-Q plot'],
     timeSeries: ['Tidsseriediagram', 'Time series plot'],
   }
   return labels[kind][isSwedish ? 0 : 1]
