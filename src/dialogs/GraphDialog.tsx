@@ -2,10 +2,10 @@ import { useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import type { SheetColumn } from '../store/workbook'
-import type { GraphKind } from '../charts/graphData'
+import type { GraphBuilderKind } from '../charts/graphData'
 
 export interface GraphSelection {
-  kind: GraphKind
+  kind: GraphBuilderKind
   valueColumnId?: string
   xColumnId?: string
   yColumnId?: string
@@ -22,7 +22,7 @@ interface GraphDialogProps {
   onSubmit: (selection: GraphSelection) => void
 }
 
-const graphKinds: GraphKind[] = [
+const graphKinds: GraphBuilderKind[] = [
   'histogram',
   'boxplot',
   'individual',
@@ -43,7 +43,7 @@ export function GraphDialog({
   onOpenChange,
   onSubmit,
 }: GraphDialogProps) {
-  const [kind, setKind] = useState<GraphKind>('histogram')
+  const [kind, setKind] = useState<GraphBuilderKind>('histogram')
   const [valueColumnId, setValueColumnId] = useState(initialColumn)
   const [xColumnId, setXColumnId] = useState(initialColumn)
   const [yColumnId, setYColumnId] = useState(numericColumns[1]?.id ?? initialColumn)
@@ -120,7 +120,10 @@ export function GraphDialog({
           <form onSubmit={submit}>
             <label className="dialog-field">
               <span>{isSwedish ? 'Diagramtyp' : 'Graph type'}</span>
-              <select value={kind} onChange={(event) => setKind(event.target.value as GraphKind)}>
+              <select
+                value={kind}
+                onChange={(event) => setKind(event.target.value as GraphBuilderKind)}
+              >
                 {graphKinds.map((graphKind) => (
                   <option value={graphKind} key={graphKind}>
                     {graphKindLabel(graphKind, isSwedish)}
@@ -208,8 +211,8 @@ function selectAvailable(value: string, columns: SheetColumn[]): string {
   return columns.some((column) => column.id === value) ? value : (columns[0]?.id ?? '')
 }
 
-function graphKindLabel(kind: GraphKind, isSwedish: boolean): string {
-  const labels: Record<GraphKind, [string, string]> = {
+function graphKindLabel(kind: GraphBuilderKind, isSwedish: boolean): string {
+  const labels: Record<GraphBuilderKind, [string, string]> = {
     histogram: ['Histogram', 'Histogram'],
     boxplot: ['Lådagram', 'Boxplot'],
     individual: ['Individvärdediagram', 'Individual value plot'],

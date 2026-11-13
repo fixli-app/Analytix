@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -7,6 +8,7 @@ import {
   type KeyboardEvent,
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import * as Dialog from '@radix-ui/react-dialog'
 import Papa from 'papaparse'
 import {
   Activity,
@@ -19,18 +21,19 @@ import {
   Clock3,
   Columns3,
   Download,
-  FileText,
   Grid2X2,
   Languages,
   Moon,
   MoreHorizontal,
+  Pencil,
   Plus,
   Redo2,
   Rows3,
-  Save,
   Search,
+  Save,
   Sigma,
   Sun,
+  Trash2,
   Undo2,
   Upload,
   X,
@@ -42,11 +45,15 @@ import {
   useWorkbookStore,
   type SheetColumn,
   type SheetRow,
+  type WorkbookDocument,
   type WorkbookSnapshot,
+  type WorksheetSnapshot,
 } from './store/workbook'
 import { statsWorker } from './workers/client'
 import { loadAutosave, saveAutosave } from './utils/projects'
+import { workbookDocument } from './store/workbook'
 import { filterRowIndexes } from './utils/filterRows'
+import { selectionBounds, selectionToTsv } from './utils/worksheetSelection'
 import type { DescriptiveSummary } from './stats/descriptive'
 import type { OneSampleTResult } from './stats/oneSampleT'
 import type { TwoSampleTResult } from './stats/twoSampleT'
@@ -61,16 +68,37 @@ import type { AndersonDarlingNormalResult } from './stats/normalAndersonDarling'
 import type { PoissonGoodnessOfFitResult } from './stats/poissonGoodnessOfFit'
 import type { ChiSquareIndependenceResult } from './stats/chiSquare'
 import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFit'
+import type { CategoryProbability } from './stats/chiSquareGoodnessOfFit'
 import type { FisherExactResult } from './stats/fisherExact'
 import type { ProcessCapabilityResult } from './stats/processCapability'
 import type { ImrControlChartResult } from './stats/imrControlChart'
 import type { GraphModel } from './charts/graphData'
+import { powerCurveGraph, survivalGraph, timeSeriesGraph } from './charts/analysisGraphs'
 import type { GageRrResult } from './quality/gageRr'
 import type { SubgroupChartKind, SubgroupControlChartResult } from './quality/subgroupControlChart'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
+import type { OneWayAnovaResult } from './stats/oneWayAnova'
+import type { TwoWayAnovaResult } from './stats/twoWayAnova'
+import type { TwoLevelFactorialAnalysis } from './doe/twoLevelFactorial'
+import { createTwoLevelFactorial } from './doe/twoLevelFactorial'
+import type { LinearRegressionResult } from './stats/linearRegression'
+import type { KaplanMeierResult } from './stats/survival'
+import type { ParametricSurvivalResult } from './stats/parametricSurvival'
+import type { TimeSeriesOptions, TimeSeriesResult } from './stats/timeSeries'
+import type { PowerRequest, PowerResult, PowerTest } from './stats/power'
+import { LinearRegressionDialog } from './dialogs/LinearRegressionDialog'
+import { SurvivalDialog } from './dialogs/SurvivalDialog'
+import { TimeSeriesDialog } from './dialogs/TimeSeriesDialog'
+import { PowerDialog } from './dialogs/PowerDialog'
+import { FlowchartEditor } from './diagrams/FlowchartEditor'
+import type { NonparametricResult, NonparametricRequest } from './dialogs/NonparametricDialog'
+import type { ResamplingRequest, ResamplingResult } from './dialogs/ResamplingDialog'
 import { OneSampleTDialog } from './dialogs/OneSampleTDialog'
+import { DataOperationsDialog, type DataOperationResult } from './dialogs/DataOperationsDialog'
+import { ColumnFormulaDialog } from './dialogs/ColumnFormulaDialog'
+import { type CalculatedColumn } from './utils/columnFormula'
 import { TwoSampleTDialog } from './dialogs/TwoSampleTDialog'
 import { PairedTDialog } from './dialogs/PairedTDialog'
 import { OneProportionDialog } from './dialogs/OneProportionDialog'
@@ -96,6 +124,14 @@ import { SubgroupControlCharts } from './charts/SubgroupControlCharts'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
 import { CompareVariancesDialog } from './dialogs/CompareVariancesDialog'
+import { OneWayAnovaDialog } from './dialogs/OneWayAnovaDialog'
+import { TwoWayAnovaDialog } from './dialogs/TwoWayAnovaDialog'
+import { NonparametricDialog } from './dialogs/NonparametricDialog'
+import { ResamplingDialog } from './dialogs/ResamplingDialog'
+import {
+  TwoLevelFactorialDialog,
+  type TwoLevelFactorialRequest,
+} from './dialogs/TwoLevelFactorialDialog'
 
 const menuKeys = [
   'file',
@@ -111,8 +147,8 @@ const menuKeys = [
   'help',
 ] as const
 const menuContent: Record<string, string[]> = {
-  file: ['Nytt projekt', 'Öppna projekt…', 'Spara projekt', 'Importera data…', 'Exportera som CSV'],
-  edit: ['Ångra', 'Gör om', 'Kopiera session'],
+  file: ['newProject', 'openProject', 'saveProject', 'importData', 'exportCsv'],
+  edit: ['undo', 'redo', 'copySession'],
   data: [
     'sortAscending',
     'sortDescending',
@@ -121,8 +157,9 @@ const menuContent: Record<string, string[]> = {
     'replaceMissing',
     'addRow',
     'addColumn',
+    'dataOperations',
   ],
-  calculate: ['Beskrivande statistik', 'standardizeColumn'],
+  calculate: ['descriptiveStatistics', 'standardizeColumn', 'columnCalculator'],
   statistics: [
     'oneSampleT',
     'oneSampleZ',
@@ -135,6 +172,15 @@ const menuContent: Record<string, string[]> = {
     'oneSamplePoissonRate',
     'twoSamplePoissonRate',
     'compareVariances',
+    'oneWayAnova',
+    'twoWayAnova',
+    'twoLevelFactorial',
+    'linearRegression',
+    'survivalAnalysis',
+    'timeSeriesAnalysis',
+    'powerSampleSize',
+    'nonparametricTests',
+    'resamplingTests',
     'normalAD',
     'poissonGOF',
     'normalKS',
@@ -142,17 +188,30 @@ const menuContent: Record<string, string[]> = {
     'chiSquareUniform',
     'fisherExact',
     'processCapability',
-    'Beskrivande statistik',
-    'Fler analyser kommer i kommande faser',
   ],
   graphs: ['imrControlChart', 'chartBuilder'],
   quality: ['qualityStudio', 'gageRr', 'subgroupControlChart'],
-  editor: ['Makron kommer i kommande faser'],
-  tools: ['Inställningar'],
-  window: ['Arbetsblad', 'Session'],
-  help: ['Om StatLab', 'Analysstatus'],
+  editor: ['flowchartEditor'],
+  tools: ['settings'],
+  window: ['worksheetWindow', 'sessionWindow'],
+  help: ['aboutStatLab', 'analysisStatus'],
 }
 const actionLabelKeys: Record<string, string> = {
+  newProject: 'newProject',
+  openProject: 'openProject',
+  saveProject: 'saveProject',
+  importData: 'importData',
+  exportCsv: 'export',
+  copySession: 'copySession',
+  undo: 'undo',
+  redo: 'redo',
+  descriptiveStatistics: 'descriptiveStatistics',
+  columnCalculator: 'columnCalculator',
+  settings: 'settings',
+  worksheetWindow: 'worksheetWindow',
+  sessionWindow: 'sessionWindow',
+  aboutStatLab: 'aboutStatLab',
+  analysisStatus: 'analysisStatus',
   sortAscending: 'sortAscending',
   sortDescending: 'sortDescending',
   deleteActiveRow: 'deleteActiveRow',
@@ -160,6 +219,7 @@ const actionLabelKeys: Record<string, string> = {
   replaceMissing: 'replaceMissing',
   addRow: 'addRow',
   addColumn: 'addColumn',
+  dataOperations: 'dataOperations',
   standardizeColumn: 'standardizeColumn',
   oneSampleT: 'oneSampleT',
   oneSampleZ: 'oneSampleZ',
@@ -172,6 +232,16 @@ const actionLabelKeys: Record<string, string> = {
   oneSamplePoissonRate: 'oneSamplePoissonRate',
   twoSamplePoissonRate: 'twoSamplePoissonRate',
   compareVariances: 'compareVariances',
+  oneWayAnova: 'oneWayAnova',
+  twoWayAnova: 'twoWayAnova',
+  twoLevelFactorial: 'twoLevelFactorial',
+  linearRegression: 'linearRegression',
+  survivalAnalysis: 'survivalAnalysis',
+  timeSeriesAnalysis: 'timeSeriesAnalysis',
+  powerSampleSize: 'powerSampleSize',
+  flowchartEditor: 'flowchartEditor',
+  nonparametricTests: 'nonparametricTests',
+  resamplingTests: 'resamplingTests',
   normalKS: 'normalKS',
   normalAD: 'normalAD',
   poissonGOF: 'poissonGOF',
@@ -212,7 +282,27 @@ interface SessionResult {
   oneSamplePoissonRate?: OneSamplePoissonRateResult
   twoSamplePoissonRate?: TwoSamplePoissonRateResult
   varianceComparison?: VarianceComparisonResult
+  oneWayAnova?: OneWayAnovaResult
+  twoWayAnova?: TwoWayAnovaResult
+  nonparametric?: NonparametricResult
+  resampling?: ResamplingResult
+  twoLevelFactorial?: TwoLevelFactorialAnalysis
+  linearRegression?: LinearRegressionResult
+  survival?: KaplanMeierResult
+  parametricSurvival?: ParametricSurvivalResult
+  timeSeries?: TimeSeriesResult
+  power?: PowerResult
+  powerGraph?: GraphModel
+  survivalGraph?: GraphModel
+  timeSeriesGraph?: GraphModel
   createdAt: Date
+}
+
+interface AppCommand {
+  action: string
+  group: string
+  label: string
+  disabled: boolean
 }
 
 function formatValue(value: number): string {
@@ -224,6 +314,22 @@ function formatPValue(value: number, language: string): string {
   return new Intl.NumberFormat(language === 'sv' ? 'sv-SE' : 'en-US', {
     maximumFractionDigits: 3,
   }).format(value)
+}
+
+function powerTestLabel(test: PowerTest, language: string): string {
+  const labels: Record<PowerTest, [string, string]> = {
+    oneSampleZ: ['1-urvals Z-medelvärde', 'One-sample Z mean'],
+    twoSampleZ: ['2-urvals Z-medelvärde', 'Two-sample Z means'],
+    oneProportion: ['1-proportion Z', 'One-proportion Z'],
+    twoProportions: ['2-proportion Z', 'Two-proportion Z'],
+    oneSamplePoisson: ['1-urvals Poisson-hastighet', 'One-sample Poisson rate'],
+    twoSamplePoisson: ['2-urvals Poisson-hastighet', 'Two-sample Poisson rates'],
+  }
+  return labels[test][language === 'sv' ? 0 : 1]
+}
+
+function powerUsesTwoGroups(test: PowerTest): boolean {
+  return test === 'twoSampleZ' || test === 'twoProportions' || test === 'twoSamplePoisson'
 }
 
 function gageAnovaLabel(
@@ -259,30 +365,61 @@ function GridCell({
   rowIndex,
   column,
   value,
+  isActive,
+  isSelected,
+  isDragging,
   onActivate,
+  onExtendSelection,
+  onDragStart,
+  onDragEnter,
   onDraftChange,
   onCommit,
 }: {
   rowIndex: number
   column: SheetColumn
   value: string
-  onActivate: () => void
+  isActive: boolean
+  isSelected: boolean
+  isDragging: boolean
+  onActivate: (extend: boolean) => void
+  onExtendSelection: (rowDelta: number, columnDelta: number) => void
+  onDragStart: () => void
+  onDragEnter: () => void
   onDraftChange: (dirty: boolean) => void
   onCommit: (value: string) => void
 }) {
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pointerActivated = useRef(false)
 
   return (
     <input
       ref={inputRef}
       aria-label={`${column.name}, rad ${rowIndex + 1}`}
-      className={`cell-input${column.type === 'text' ? ' text-cell' : ''}${value === '' ? ' missing' : ''}`}
+      className={`cell-input${column.type === 'text' ? ' text-cell' : ''}${value === '' ? ' missing' : ''}${isSelected ? ' selected' : ''}`}
       data-column={column.id}
       data-row={rowIndex}
       value={draft}
       placeholder="*"
-      onFocus={onActivate}
+      onMouseDown={(event) => {
+        if (event.button !== 0) return
+        pointerActivated.current = true
+        onActivate(event.shiftKey)
+        onDragStart()
+      }}
+      onMouseEnter={() => {
+        if (isDragging) onDragEnter()
+      }}
+      onClick={() => {
+        pointerActivated.current = false
+      }}
+      onFocus={() => {
+        if (pointerActivated.current) {
+          pointerActivated.current = false
+          return
+        }
+        if (!isActive) onActivate(false)
+      }}
       onChange={(event) => {
         setDraft(event.target.value)
         onDraftChange(event.target.value !== value)
@@ -292,6 +429,20 @@ function GridCell({
         onDraftChange(false)
       }}
       onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.shiftKey && draft === value) {
+          const movement: Record<string, [number, number]> = {
+            ArrowDown: [1, 0],
+            ArrowLeft: [0, -1],
+            ArrowRight: [0, 1],
+            ArrowUp: [-1, 0],
+          }
+          const delta = movement[event.key]
+          if (delta) {
+            event.preventDefault()
+            onExtendSelection(...delta)
+            return
+          }
+        }
         if (event.key === 'Enter') {
           event.preventDefault()
           inputRef.current?.blur()
@@ -336,28 +487,97 @@ function parseTable(data: unknown[][]): { columns: SheetColumn[]; rows: SheetRow
   return { columns, rows }
 }
 
+function isWorkbookSnapshot(value: unknown): value is WorkbookSnapshot {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  return (
+    Array.isArray(candidate.columns) &&
+    candidate.columns.every(
+      (column) =>
+        typeof column === 'object' &&
+        column !== null &&
+        typeof (column as SheetColumn).id === 'string' &&
+        typeof (column as SheetColumn).name === 'string' &&
+        ['text', 'numeric', 'date'].includes((column as SheetColumn).type),
+    ) &&
+    Array.isArray(candidate.rows) &&
+    candidate.rows.every(
+      (row) =>
+        typeof row === 'object' &&
+        row !== null &&
+        !Array.isArray(row) &&
+        Object.values(row).every((cell) => typeof cell === 'string'),
+    )
+  )
+}
+
+function isWorkbookDocument(value: unknown): value is WorkbookDocument {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  if (
+    candidate.version !== 1 ||
+    typeof candidate.activeSheetId !== 'string' ||
+    !Array.isArray(candidate.sheets) ||
+    candidate.sheets.length === 0
+  ) {
+    return false
+  }
+  const sheets = candidate.sheets as unknown[]
+  return (
+    sheets.every(
+      (sheet) =>
+        typeof sheet === 'object' &&
+        sheet !== null &&
+        typeof (sheet as WorksheetSnapshot).id === 'string' &&
+        typeof (sheet as WorksheetSnapshot).name === 'string' &&
+        isWorkbookSnapshot(sheet),
+    ) &&
+    sheets.some((sheet) => (sheet as WorksheetSnapshot).id === candidate.activeSheetId) &&
+    new Set(sheets.map((sheet) => (sheet as WorksheetSnapshot).id)).size === sheets.length
+  )
+}
+
 function App() {
-  const [language, setLanguage] = useState(i18n.language)
+  const [language, setLanguage] = useState(() => {
+    const savedLanguage = localStorage.getItem('statlab-language')
+    return savedLanguage === 'en' || savedLanguage === 'sv' ? savedLanguage : i18n.language
+  })
+  const [projectName, setProjectName] = useState(
+    () => localStorage.getItem('statlab-project-name') || 'Produktionsanalys',
+  )
   const t = (key: string) => i18n.t(key, { lng: language })
   const columns = useWorkbookStore((state) => state.columns)
   const rows = useWorkbookStore((state) => state.rows)
+  const worksheets = useWorkbookStore((state) => state.worksheets)
+  const activeSheetId = useWorkbookStore((state) => state.activeSheetId)
   const activeCell = useWorkbookStore((state) => state.activeCell)
   const setCell = useWorkbookStore((state) => state.setCell)
   const pasteCells = useWorkbookStore((state) => state.pasteCells)
   const insertRow = useWorkbookStore((state) => state.insertRow)
   const addColumn = useWorkbookStore((state) => state.addColumn)
   const appendNumericColumn = useWorkbookStore((state) => state.appendNumericColumn)
+  const appendColumn = useWorkbookStore((state) => state.appendColumn)
   const deleteRow = useWorkbookStore((state) => state.deleteRow)
   const deleteColumn = useWorkbookStore((state) => state.deleteColumn)
   const replaceMissing = useWorkbookStore((state) => state.replaceMissing)
   const renameColumn = useWorkbookStore((state) => state.renameColumn)
   const replaceData = useWorkbookStore((state) => state.replaceData)
+  const createWorksheet = useWorkbookStore((state) => state.createWorksheet)
+  const renameWorksheetInStore = useWorkbookStore((state) => state.renameWorksheet)
+  const deleteWorksheetFromStore = useWorkbookStore((state) => state.deleteWorksheet)
+  const activateWorksheet = useWorkbookStore((state) => state.activateWorksheet)
+  const replaceWorkbook = useWorkbookStore((state) => state.replaceWorkbook)
   const sortByColumn = useWorkbookStore((state) => state.sortByColumn)
   const setActiveCell = useWorkbookStore((state) => state.setActiveCell)
   const undo = useWorkbookStore((state) => state.undo)
   const redo = useWorkbookStore((state) => state.redo)
   const [targetColumn, setTargetColumn] = useState('C4')
   const [filterQuery, setFilterQuery] = useState('')
+  const [selectionAnchor, setSelectionAnchor] = useState({ row: 0, column: 0 })
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false)
+  const [renamingWorksheetId, setRenamingWorksheetId] = useState<string | null>(null)
+  const [worksheetNameDraft, setWorksheetNameDraft] = useState('')
+  const [pendingDeleteWorksheetId, setPendingDeleteWorksheetId] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending')
   const [session, setSession] = useState<SessionResult | null>(null)
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
@@ -383,8 +603,25 @@ function App() {
   const [oneSamplePoissonDialogOpen, setOneSamplePoissonDialogOpen] = useState(false)
   const [twoSamplePoissonDialogOpen, setTwoSamplePoissonDialogOpen] = useState(false)
   const [varianceDialogOpen, setVarianceDialogOpen] = useState(false)
+  const [oneWayAnovaDialogOpen, setOneWayAnovaDialogOpen] = useState(false)
+  const [twoWayAnovaDialogOpen, setTwoWayAnovaDialogOpen] = useState(false)
+  const [twoLevelFactorialDialogOpen, setTwoLevelFactorialDialogOpen] = useState(false)
+  const [linearRegressionDialogOpen, setLinearRegressionDialogOpen] = useState(false)
+  const [survivalDialogOpen, setSurvivalDialogOpen] = useState(false)
+  const [timeSeriesDialogOpen, setTimeSeriesDialogOpen] = useState(false)
+  const [powerDialogOpen, setPowerDialogOpen] = useState(false)
+  const [flowchartEditorOpen, setFlowchartEditorOpen] = useState(false)
+  const [nonparametricDialogOpen, setNonparametricDialogOpen] = useState(false)
+  const [resamplingDialogOpen, setResamplingDialogOpen] = useState(false)
+  const [dataOperationsDialogOpen, setDataOperationsDialogOpen] = useState(false)
+  const [columnFormulaDialogOpen, setColumnFormulaDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 98, left: 18 })
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [commandQuery, setCommandQuery] = useState('')
+  const [commandIndex, setCommandIndex] = useState(0)
+  const [appDialog, setAppDialog] = useState<'settings' | 'about' | 'analysis' | null>(null)
   const [toast, setToast] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     localStorage.getItem('statlab-theme') === 'dark' ? 'dark' : 'light',
@@ -394,6 +631,34 @@ function App() {
   const projectInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const visibleRowIndexes = useMemo(() => filterRowIndexes(rows, filterQuery), [filterQuery, rows])
+  const operationWorksheets = useMemo(
+    () =>
+      worksheets.map((worksheet) =>
+        worksheet.id === activeSheetId ? { ...worksheet, columns, rows } : worksheet,
+      ),
+    [activeSheetId, columns, rows, worksheets],
+  )
+  const commands = useMemo<AppCommand[]>(
+    () =>
+      menuKeys.flatMap((menuKey) =>
+        menuContent[menuKey].map((action) => ({
+          action,
+          group: i18n.t(menuKey, { lng: language }),
+          label: i18n.t(actionLabelKeys[action] ?? action, { lng: language }),
+          disabled: action === 'copySession' && !session,
+        })),
+      ),
+    [language, session],
+  )
+  const filteredCommands = useMemo(() => {
+    const query = commandQuery.trim().toLocaleLowerCase(language === 'sv' ? 'sv' : 'en')
+    if (!query) return commands
+    return commands.filter((command) =>
+      `${command.label} ${command.group}`
+        .toLocaleLowerCase(language === 'sv' ? 'sv' : 'en')
+        .includes(query),
+    )
+  }, [commandQuery, commands, language])
 
   const virtualizer = useVirtualizer({
     count: visibleRowIndexes.length,
@@ -427,37 +692,68 @@ function App() {
   }, [activeCell.row, activeCell.column, columns])
 
   useEffect(() => {
+    setSelectionAnchor({ row: 0, column: 0 })
+  }, [activeSheetId])
+
+  useEffect(() => {
+    if (!isDraggingSelection) return
+    const stopDragging = () => setIsDraggingSelection(false)
+    window.addEventListener('mouseup', stopDragging)
+    window.addEventListener('blur', stopDragging)
+    return () => {
+      window.removeEventListener('mouseup', stopDragging)
+      window.removeEventListener('blur', stopDragging)
+    }
+  }, [isDraggingSelection])
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('statlab-theme', theme)
   }, [theme])
 
   useEffect(() => {
+    localStorage.setItem('statlab-language', language)
+    void i18n.changeLanguage(language)
+  }, [language])
+
+  useEffect(() => {
+    localStorage.setItem('statlab-project-name', projectName)
+  }, [projectName])
+
+  useEffect(() => {
     let active = true
     void loadAutosave()
       .then((saved) => {
-        if (active && saved?.columns.length && saved.rows.length) {
-          useWorkbookStore.setState({ columns: saved.columns, rows: saved.rows })
+        if (active && saved) {
+          replaceWorkbook(saved)
         }
       })
       .catch(() => undefined)
     return () => {
       active = false
     }
-  }, [])
+  }, [replaceWorkbook])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const state = useWorkbookStore.getState()
-      const snapshot: WorkbookSnapshot = { columns: state.columns, rows: state.rows }
-      void saveAutosave(snapshot)
+      void saveAutosave(workbookDocument(state))
         .then(() => setSavedAt(new Date()))
         .catch(() => undefined)
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [columns, rows])
+  }, [activeSheetId, columns, rows, worksheets])
 
   useEffect(() => {
     const listener = (event: globalThis.KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setMenuOpen(null)
+        setCommandQuery('')
+        setCommandIndex(0)
+        setCommandPaletteOpen(true)
+        return
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault()
         const focusedCell = document.activeElement
@@ -479,12 +775,38 @@ function App() {
   }, [redo, undo])
 
   useEffect(() => {
+    setCommandIndex(0)
+  }, [commandQuery, commandPaletteOpen])
+
+  useEffect(() => {
     if (!toast) return
     const timer = window.setTimeout(() => setToast(''), 2800)
     return () => window.clearTimeout(timer)
   }, [toast])
 
   const activeColumn = columns[activeCell.column]
+  const selectedBounds = selectionBounds(selectionAnchor, activeCell)
+  const activeWorksheet = worksheets.find((worksheet) => worksheet.id === activeSheetId)
+  const graphCount = Number(
+    Boolean(
+      session?.graph ||
+      session?.powerGraph ||
+      session?.survivalGraph ||
+      session?.timeSeriesGraph ||
+      session?.timeSeries ||
+      session?.survival ||
+      session?.parametricSurvival ||
+      session?.imrControlChart ||
+      session?.subgroupControlChart,
+    ),
+  )
+  const analysisDialogKey = `${activeSheetId}:${targetColumn}:${columns
+    .map((column) => `${column.id}:${column.type}`)
+    .join('|')}`
+  const worksheetName = (worksheet: WorksheetSnapshot) =>
+    worksheet.id === 'worksheet-1' && worksheet.name === 'Arbetsblad 1'
+      ? t('sheet')
+      : worksheet.name
   const isSwedish = language === 'sv'
   const numericColumns = columns.filter((column) => column.type === 'numeric')
   const categoryColumns = columns.filter((column) => column.type !== 'numeric')
@@ -512,6 +834,186 @@ function App() {
     }
   }
 
+  async function runNonparametricAnalysis(request: NonparametricRequest) {
+    try {
+      let result: NonparametricResult
+      let columnName: string
+      if (request.kind === 'mannWhitney') {
+        const firstColumn = columns.find((column) => column.id === request.column1)
+        const secondColumn = columns.find((column) => column.id === request.column2)
+        if (!firstColumn || !secondColumn) throw new Error('Choose both numeric group columns.')
+        const first = rows.map((row) => {
+          const raw = row[firstColumn.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        const second = rows.map((row) => {
+          const raw = row[secondColumn.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        result = {
+          kind: request.kind,
+          result: await statsWorker.mannWhitney(first, second, request.alpha),
+        }
+        columnName = `${firstColumn.name} · ${secondColumn.name}`
+      } else if (request.kind === 'kruskalWallis') {
+        const measurement = columns.find((column) => column.id === request.measurement)
+        const group = columns.find((column) => column.id === request.group)
+        if (!measurement || !group) throw new Error('Choose measurement and group columns.')
+        const values = rows.map((row) => {
+          const raw = row[measurement.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        result = {
+          kind: request.kind,
+          result: await statsWorker.kruskalWallis(
+            values,
+            rows.map((row) => row[group.id] ?? null),
+            request.alpha,
+          ),
+        }
+        columnName = `${measurement.name} · ${group.name}`
+      } else if (request.kind === 'moodMedian') {
+        const measurement = columns.find((column) => column.id === request.measurement)
+        const group = columns.find((column) => column.id === request.group)
+        if (!measurement || !group) throw new Error('Choose measurement and group columns.')
+        const values = rows.map((row) => {
+          const raw = row[measurement.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        result = {
+          kind: request.kind,
+          result: await statsWorker.moodMedian(
+            values,
+            rows.map((row) => row[group.id] ?? null),
+            request.alpha,
+          ),
+        }
+        columnName = `${measurement.name} · ${group.name}`
+      } else if (request.kind === 'friedman') {
+        const treatments = request.treatments.map((id) =>
+          columns.find((column) => column.id === id),
+        )
+        if (treatments.some((column) => !column || column.type !== 'numeric')) {
+          throw new Error('Choose valid numeric treatment columns.')
+        }
+        const validTreatments = treatments as SheetColumn[]
+        const treatmentValues = validTreatments.map((column) =>
+          rows.map((row) => {
+            const raw = row[column.id]?.trim()
+            return raw ? Number(raw.replace(',', '.')) : null
+          }),
+        )
+        result = {
+          kind: request.kind,
+          result: await statsWorker.friedman(
+            treatmentValues,
+            validTreatments.map((column) => column.name),
+            request.alpha,
+          ),
+        }
+        columnName = validTreatments.map((column) => column.name).join(' · ')
+      } else {
+        const column = columns.find((item) => item.id === request.column)
+        if (!column || column.type !== 'numeric') throw new Error('Choose a numeric column.')
+        const values = rows.map((row) => {
+          const raw = row[column.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        if (request.kind === 'sign') {
+          result = {
+            kind: request.kind,
+            result: await statsWorker.signTest(values, request.median, request.alpha),
+          }
+        } else if (request.kind === 'wilcoxon') {
+          result = {
+            kind: request.kind,
+            result: await statsWorker.wilcoxonSignedRank(values, request.median, request.alpha),
+          }
+        } else {
+          result = { kind: request.kind, result: await statsWorker.runsTest(values, request.alpha) }
+        }
+        columnName = column.name
+      }
+      setSession({
+        title: language === 'sv' ? 'Icke-parametriskt test' : 'Nonparametric test',
+        columnName,
+        nonparametric: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Nonparametric test could not be completed.',
+      )
+    }
+  }
+
+  async function runResamplingAnalysis(request: ResamplingRequest) {
+    try {
+      let result: ResamplingResult
+      let columnName: string
+      if (request.kind === 'bootstrap') {
+        const column = columns.find((item) => item.id === request.column)
+        if (!column || column.type !== 'numeric') throw new Error('Choose a numeric column.')
+        const values = rows.map((row) => {
+          const raw = row[column.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        result = {
+          kind: 'bootstrap',
+          result: await statsWorker.bootstrapInterval(
+            values,
+            request.statistic,
+            request.resamples,
+            request.seed,
+            request.alpha,
+          ),
+        }
+        columnName = column.name
+      } else {
+        const firstColumn = columns.find((column) => column.id === request.column1)
+        const secondColumn = columns.find((column) => column.id === request.column2)
+        if (
+          !firstColumn ||
+          !secondColumn ||
+          firstColumn.type !== 'numeric' ||
+          secondColumn.type !== 'numeric'
+        ) {
+          throw new Error('Choose two numeric columns.')
+        }
+        const first = rows.map((row) => {
+          const raw = row[firstColumn.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        const second = rows.map((row) => {
+          const raw = row[secondColumn.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        result = {
+          kind: 'permutation',
+          result: await statsWorker.permutationDifference(
+            first,
+            second,
+            request.permutations,
+            request.seed,
+            request.alpha,
+            request.statistic,
+          ),
+        }
+        columnName = `${firstColumn.name} − ${secondColumn.name}`
+      }
+      setSession({
+        title: language === 'sv' ? 'Resamplingstest' : 'Resampling analysis',
+        columnName,
+        resampling: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Resampling analysis could not be completed.',
+      )
+    }
+  }
+
   async function standardizeSelectedColumn() {
     const column = columns.find((item) => item.id === targetColumn)
     if (!column || column.type !== 'numeric') {
@@ -533,6 +1035,19 @@ function App() {
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Kolumnen kunde inte standardiseras.')
     }
+  }
+
+  function addCalculatedColumn(result: CalculatedColumn) {
+    const columnId = appendNumericColumn(
+      result.name,
+      result.values.map((value) => (value === null ? '' : String(value))),
+    )
+    setTargetColumn(columnId)
+    setToast(
+      language === 'sv'
+        ? `${result.name} lagrad i ${columnId}.`
+        : `${result.name} stored in ${columnId}.`,
+    )
   }
 
   async function runOneSampleTAnalysis(columnId: string, hypothesizedMean: number, alpha: number) {
@@ -876,7 +1391,11 @@ function App() {
     }
   }
 
-  async function runChiSquareGoodnessOfFit(columnId: string, alpha: number) {
+  async function runChiSquareGoodnessOfFit(
+    columnId: string,
+    alpha: number,
+    probabilities: CategoryProbability[] | null,
+  ) {
     const column = columns.find((item) => item.id === columnId)
     if (!column) {
       setToast('Välj en kategorikolumn för goodness-of-fit-testet.')
@@ -884,9 +1403,14 @@ function App() {
     }
     const values = rows.map((row) => row[column.id] ?? null)
     try {
-      const result = await statsWorker.chiSquareUniformGoodnessOfFit(values, alpha)
+      const result = probabilities
+        ? await statsWorker.chiSquareGoodnessOfFit(values, probabilities, alpha)
+        : await statsWorker.chiSquareUniformGoodnessOfFit(values, alpha)
       setSession({
-        title: 'Chi-två goodness-of-fit (lika andelar)',
+        title:
+          result.probabilitySource === 'equal'
+            ? 'Chi-två goodness-of-fit (lika andelar)'
+            : 'Chi-två goodness-of-fit (angivna sannolikheter)',
         columnName: column.name,
         chiSquareGoodnessOfFit: result,
         createdAt: new Date(),
@@ -1236,12 +1760,303 @@ function App() {
     }
   }
 
+  async function runOneWayAnova(measurementColumnId: string, groupColumnId: string, alpha: number) {
+    const measurementColumn = columns.find((column) => column.id === measurementColumnId)
+    const groupColumn = columns.find((column) => column.id === groupColumnId)
+    if (!measurementColumn || measurementColumn.type !== 'numeric' || !groupColumn) {
+      setToast(
+        language === 'sv' ? 'Välj mät- och gruppkolumn.' : 'Select measurement and group columns.',
+      )
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[measurementColumn.id]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const groupLabels = rows.map((row) => row[groupColumn.id] ?? null)
+    try {
+      const result = await statsWorker.oneWayAnova(values, groupLabels, alpha)
+      setSession({
+        title: language === 'sv' ? 'Envägs-ANOVA' : 'One-way ANOVA',
+        columnName: `${measurementColumn.name} · ${groupColumn.name}`,
+        oneWayAnova: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'ANOVA could not be completed.')
+    }
+  }
+
+  async function runTwoWayAnova(
+    responseColumnId: string,
+    factor1ColumnId: string,
+    factor2ColumnId: string,
+    alpha: number,
+  ) {
+    const responseColumn = columns.find((column) => column.id === responseColumnId)
+    const factor1Column = columns.find((column) => column.id === factor1ColumnId)
+    const factor2Column = columns.find((column) => column.id === factor2ColumnId)
+    if (
+      !responseColumn ||
+      responseColumn.type !== 'numeric' ||
+      !factor1Column ||
+      !factor2Column ||
+      factor1Column.id === factor2Column.id
+    ) {
+      setToast(
+        language === 'sv'
+          ? 'Välj ett svar och två olika faktorkolumner.'
+          : 'Select a response and two different factor columns.',
+      )
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[responseColumnId]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const factor1Labels = rows.map((row) => row[factor1ColumnId] ?? null)
+    const factor2Labels = rows.map((row) => row[factor2ColumnId] ?? null)
+    try {
+      const result = await statsWorker.twoWayAnova(
+        values,
+        factor1Labels,
+        factor2Labels,
+        {
+          response: responseColumn.name,
+          factor1: factor1Column.name,
+          factor2: factor2Column.name,
+        },
+        alpha,
+      )
+      setSession({
+        title: language === 'sv' ? 'Tvåvägs-ANOVA' : 'Two-way ANOVA',
+        columnName: `${responseColumn.name} · ${factor1Column.name} · ${factor2Column.name}`,
+        twoWayAnova: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Two-way ANOVA could not be completed.')
+    }
+  }
+
+  async function runLinearRegression(
+    responseColumnId: string,
+    predictorColumnIds: string[],
+    alpha: number,
+    modelOptions: { quadraticPredictorIds: string[]; includeInteractions: boolean },
+  ) {
+    const responseColumn = columns.find((column) => column.id === responseColumnId)
+    const predictorColumns = predictorColumnIds.map((id) =>
+      columns.find((column) => column.id === id),
+    )
+    if (
+      !responseColumn ||
+      responseColumn.type !== 'numeric' ||
+      predictorColumns.some((column) => !column || column.type === 'date') ||
+      predictorColumnIds.includes(responseColumnId)
+    ) {
+      setToast(
+        language === 'sv'
+          ? 'Välj ett numeriskt svar och numeriska prediktorer.'
+          : 'Select a numeric response and numeric predictors.',
+      )
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[responseColumnId]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const predictors = predictorColumnIds.map((id, index) => ({
+      name: predictorColumns[index]!.name,
+      type:
+        predictorColumns[index]!.type === 'numeric'
+          ? ('numeric' as const)
+          : ('categorical' as const),
+      values: rows.map((row): number | string | null => {
+        const raw = row[id]?.trim()
+        if (!raw) return null
+        return predictorColumns[index]!.type === 'numeric' ? Number(raw.replace(',', '.')) : raw
+      }),
+    }))
+    try {
+      const result = await statsWorker.multipleLinearRegression(values, predictors, {
+        responseName: responseColumn.name,
+        alpha,
+        includeInteractions: modelOptions.includeInteractions,
+        quadraticPredictors: modelOptions.quadraticPredictorIds.map(
+          (id) => columns.find((column) => column.id === id)!.name,
+        ),
+      })
+      setSession({
+        title: language === 'sv' ? 'Multipel linjär regression' : 'Multiple linear regression',
+        columnName: `${responseColumn.name} · ${predictorColumns.map((column) => column!.name).join(' · ')}`,
+        linearRegression: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Linear regression could not be completed.')
+    }
+  }
+
+  async function runSurvivalAnalysis(
+    timeColumnId: string,
+    statusColumnId: string,
+    groupColumnId: string | undefined,
+    alpha: number,
+  ) {
+    const timeColumn = columns.find((column) => column.id === timeColumnId)
+    const statusColumn = columns.find((column) => column.id === statusColumnId)
+    const groupColumn = groupColumnId
+      ? columns.find((column) => column.id === groupColumnId)
+      : undefined
+    if (
+      !timeColumn ||
+      timeColumn.type !== 'numeric' ||
+      !statusColumn ||
+      statusColumn.type !== 'numeric' ||
+      timeColumn.id === statusColumn.id ||
+      (groupColumnId && (!groupColumn || groupColumn.type !== 'text'))
+    ) {
+      setToast(
+        language === 'sv'
+          ? 'Välj tid, status och en valfri textgrupp.'
+          : 'Select time, status, and an optional text group.',
+      )
+      return
+    }
+    const times = rows.map((row) => {
+      const raw = row[timeColumnId]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const statuses = rows.map((row) => {
+      const raw = row[statusColumnId]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    const groups = groupColumnId ? rows.map((row) => row[groupColumnId] ?? null) : undefined
+    try {
+      const [result, parametricResult] = await Promise.all([
+        statsWorker.kaplanMeier(times, statuses, groups, alpha),
+        statsWorker.parametricSurvival(times, statuses, groups),
+      ])
+      setSession({
+        title: language === 'sv' ? 'Överlevnadsanalys' : 'Survival analysis',
+        columnName: `${timeColumn.name} · ${statusColumn.name}${groupColumn ? ` · ${groupColumn.name}` : ''}`,
+        survival: result,
+        parametricSurvival: parametricResult,
+        survivalGraph: survivalGraph(result, parametricResult, language),
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Survival analysis could not be completed.')
+    }
+  }
+
+  async function runTimeSeriesAnalysis(columnId: string, options: TimeSeriesOptions) {
+    const column = columns.find((item) => item.id === columnId)
+    if (!column || column.type !== 'numeric') {
+      setToast(
+        language === 'sv'
+          ? 'Välj en numerisk tidsseriekolumn.'
+          : 'Select a numeric time-series column.',
+      )
+      return
+    }
+    const values = rows.map((row) => {
+      const raw = row[columnId]?.trim()
+      return raw ? Number(raw.replace(',', '.')) : null
+    })
+    try {
+      const result = await statsWorker.analyzeTimeSeries(values, options)
+      setSession({
+        title: language === 'sv' ? 'Tidsserieanalys' : 'Time-series analysis',
+        columnName: column.name,
+        timeSeries: result,
+        timeSeriesGraph: timeSeriesGraph(result, language),
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : 'Time-series analysis could not be completed.',
+      )
+    }
+  }
+
+  async function runPowerAnalysis(request: PowerRequest) {
+    try {
+      const result = await statsWorker.powerAndSampleSize(request)
+      setSession({
+        title: language === 'sv' ? 'Power och stickprovsstorlek' : 'Power and sample size',
+        columnName: request.test,
+        power: result,
+        powerGraph: powerCurveGraph(result, language),
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Power analysis could not be completed.')
+    }
+  }
+
+  async function runTwoLevelFactorial(request: TwoLevelFactorialRequest) {
+    try {
+      if (request.kind === 'create') {
+        const design = createTwoLevelFactorial(
+          request.factors,
+          request.replicates,
+          request.centerPoints,
+          request.randomize,
+          request.seed,
+        )
+        createWorksheet('DOE')
+        replaceData(design.columns, design.rows)
+        setToast(
+          language === 'sv'
+            ? `DOE-arbetsblad skapat med ${design.totalRuns} körningar och ${request.factors.length} faktorer.`
+            : `DOE worksheet created with ${design.totalRuns} runs and ${request.factors.length} factors.`,
+        )
+        return
+      }
+      const result = await statsWorker.analyzeTwoLevelFactorial(
+        rows,
+        columns,
+        request.responseColumnId,
+        request.factorColumnIds,
+        request.alpha,
+      )
+      setSession({
+        title: language === 'sv' ? '2-nivåers faktorförsök' : 'Two-level factorial DOE',
+        columnName: result.responseName,
+        twoLevelFactorial: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'DOE analysis could not be completed.')
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
-    if (action === 'addRow') insertRow(activeCell.row)
+    if (action === 'newProject') {
+      const confirmed = window.confirm(
+        language === 'sv'
+          ? 'Skapa ett nytt projekt? Osparade ändringar ersätts.'
+          : 'Create a new project? Unsaved changes will be replaced.',
+      )
+      if (!confirmed) return
+      replaceWorkbook({
+        columns: [
+          { id: 'C1', name: language === 'sv' ? 'Variabel 1' : 'Variable 1', type: 'numeric' },
+        ],
+        rows: [],
+      })
+      setSession(null)
+      setFilterQuery('')
+      setTargetColumn('C1')
+      setProjectName(language === 'sv' ? 'Nytt projekt' : 'New project')
+      setToast(language === 'sv' ? 'Nytt projekt skapat.' : 'New project created.')
+    } else if (action === 'addRow') insertRow(activeCell.row)
     else if (action === 'addColumn') addColumn()
-    else if (action === 'Ångra') undo()
-    else if (action === 'Gör om') redo()
+    else if (action === 'undo') undo()
+    else if (action === 'redo') redo()
     else if (action === 'sortAscending' && activeColumn) {
       sortByColumn(activeColumn.id, 'ascending')
       setSortDirection('descending')
@@ -1263,12 +2078,25 @@ function App() {
     } else if (action === 'replaceMissing' && activeColumn) {
       const replacement = window.prompt(`Ersätt saknade värden i ${activeColumn.name} med:`, '0')
       if (replacement !== null) replaceMissing(activeColumn.id, replacement)
-    } else if (action === 'Exportera som CSV') exportCsv()
-    else if (action === 'Importera data…') fileInputRef.current?.click()
-    else if (action === 'Öppna projekt…') projectInputRef.current?.click()
-    else if (action === 'Spara projekt') saveProject()
-    else if (action === 'Beskrivande statistik') void runAnalysis()
-    else if (action === 'standardizeColumn') void standardizeSelectedColumn()
+    } else if (action === 'dataOperations') setDataOperationsDialogOpen(true)
+    else if (action === 'exportCsv') exportCsv()
+    else if (action === 'importData') fileInputRef.current?.click()
+    else if (action === 'openProject') projectInputRef.current?.click()
+    else if (action === 'saveProject') saveProject()
+    else if (action === 'descriptiveStatistics') void runAnalysis()
+    else if (action === 'copySession') void copySession()
+    else if (action === 'settings') setAppDialog('settings')
+    else if (action === 'aboutStatLab') setAppDialog('about')
+    else if (action === 'analysisStatus') setAppDialog('analysis')
+    else if (action === 'worksheetWindow') {
+      document.getElementById('arbetsblad')?.scrollIntoView({ behavior: 'smooth' })
+      document.querySelector<HTMLElement>('#arbetsblad [data-row]')?.focus()
+    } else if (action === 'sessionWindow') {
+      const panel = document.getElementById('session')
+      panel?.scrollIntoView({ behavior: 'smooth' })
+      panel?.focus()
+    } else if (action === 'standardizeColumn') void standardizeSelectedColumn()
+    else if (action === 'columnCalculator') setColumnFormulaDialogOpen(true)
     else if (action === 'oneSampleT') setOneSampleTDialogOpen(true)
     else if (action === 'oneSampleZ') setOneSampleZDialogOpen(true)
     else if (action === 'twoSampleZ') setTwoSampleZDialogOpen(true)
@@ -1292,7 +2120,21 @@ function App() {
     else if (action === 'oneSamplePoissonRate') setOneSamplePoissonDialogOpen(true)
     else if (action === 'twoSamplePoissonRate') setTwoSamplePoissonDialogOpen(true)
     else if (action === 'compareVariances') setVarianceDialogOpen(true)
-    else setToast(`${action}: inte tillgängligt i denna första version.`)
+    else if (action === 'oneWayAnova') setOneWayAnovaDialogOpen(true)
+    else if (action === 'twoWayAnova') setTwoWayAnovaDialogOpen(true)
+    else if (action === 'twoLevelFactorial') setTwoLevelFactorialDialogOpen(true)
+    else if (action === 'linearRegression') setLinearRegressionDialogOpen(true)
+    else if (action === 'survivalAnalysis') setSurvivalDialogOpen(true)
+    else if (action === 'timeSeriesAnalysis') setTimeSeriesDialogOpen(true)
+    else if (action === 'powerSampleSize') setPowerDialogOpen(true)
+    else if (action === 'flowchartEditor') setFlowchartEditorOpen(true)
+    else if (action === 'nonparametricTests') setNonparametricDialogOpen(true)
+    else if (action === 'resamplingTests') setResamplingDialogOpen(true)
+    else setToast(`${action}: inte tillgängligt.`)
+  }
+
+  function changeLanguage(nextLanguage: 'sv' | 'en') {
+    setLanguage(nextLanguage)
   }
 
   function exportCsv() {
@@ -1303,9 +2145,148 @@ function App() {
     downloadFile(csv, 'statlab-data.csv', 'text/csv;charset=utf-8')
   }
 
+  function exportLinearRegressionDiagnostics() {
+    const result = session?.linearRegression
+    if (!result) return
+    const csv = Papa.unparse({
+      fields: [
+        'Worksheet row',
+        'Observed',
+        'Fitted',
+        'Residual',
+        'Leverage',
+        'Standardized residual',
+        "Cook's distance",
+        'Mean CI lower',
+        'Mean CI upper',
+        'Prediction interval lower',
+        'Prediction interval upper',
+      ],
+      data: result.observations.map((observation) => [
+        observation.sourceRow,
+        observation.observed,
+        observation.fitted,
+        observation.residual,
+        observation.leverage,
+        observation.standardizedResidual,
+        observation.cooksDistance,
+        observation.fittedConfidenceInterval[0],
+        observation.fittedConfidenceInterval[1],
+        observation.predictionInterval[0],
+        observation.predictionInterval[1],
+      ]),
+    })
+    downloadFile(csv, 'regression-diagnostics.csv', 'text/csv;charset=utf-8')
+  }
+
+  function exportSurvivalEstimates() {
+    const result = session?.survival
+    if (!result) return
+    const csv = Papa.unparse({
+      fields: [
+        'Group',
+        'Time',
+        'At risk',
+        'Events',
+        'Censored',
+        'Survival probability',
+        'Lower confidence limit',
+        'Upper confidence limit',
+      ],
+      data: result.curves.flatMap((curve) =>
+        curve.points.map((point) => [
+          curve.group,
+          point.time,
+          point.atRisk,
+          point.events,
+          point.censored,
+          point.survival,
+          point.lowerConfidenceLimit,
+          point.upperConfidenceLimit,
+        ]),
+      ),
+    })
+    downloadFile(csv, 'kaplan-meier-estimates.csv', 'text/csv;charset=utf-8')
+  }
+
   function saveProject() {
-    const data: WorkbookSnapshot = { columns, rows }
-    downloadFile(JSON.stringify(data, null, 2), 'analys.statlab', 'application/json')
+    const data = { ...workbookDocument(useWorkbookStore.getState()), name: projectName }
+    const fileName = projectName.trim().replace(/[\\/:*?"<>|]+/g, '-') || 'statlab'
+    downloadFile(JSON.stringify(data, null, 2), `${fileName}.statlab`, 'application/json')
+  }
+
+  function applyDataOperation(result: DataOperationResult) {
+    if (result.kind === 'worksheets' || result.kind === 'worksheet') {
+      const outputWorksheets = result.kind === 'worksheets' ? result.worksheets : [result]
+      for (const worksheet of outputWorksheets) {
+        createWorksheet(worksheet.name)
+        const worksheetId = useWorkbookStore.getState().activeSheetId
+        renameWorksheetInStore(worksheetId, worksheet.name)
+        replaceData(worksheet.columns, worksheet.rows)
+      }
+      const state = useWorkbookStore.getState()
+      setTargetColumn(state.columns.find((column) => column.type === 'numeric')?.id ?? '')
+      setSelectionAnchor({ row: 0, column: 0 })
+    } else {
+      const columnId = appendColumn(result.name, result.type, result.values)
+      setTargetColumn(columnId)
+    }
+    setFilterQuery('')
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+    setToast(result.summary)
+  }
+
+  function openWorksheet(id: string) {
+    const worksheet = worksheets.find((item) => item.id === id)
+    if (!worksheet) return
+    setRenamingWorksheetId(null)
+    setPendingDeleteWorksheetId(null)
+    activateWorksheet(id)
+    setTargetColumn(worksheet.columns.find((column) => column.type === 'numeric')?.id ?? '')
+    setFilterQuery('')
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+  }
+
+  function addWorksheet() {
+    setRenamingWorksheetId(null)
+    setPendingDeleteWorksheetId(null)
+    createWorksheet(language === 'sv' ? 'Arbetsblad' : 'Worksheet')
+    setTargetColumn('C1')
+    setFilterQuery('')
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+    setToast(language === 'sv' ? 'Nytt arbetsblad skapat.' : 'New worksheet created.')
+  }
+
+  function renameActiveWorksheet() {
+    const worksheet = worksheets.find((item) => item.id === activeSheetId)
+    if (!worksheet) return
+    setPendingDeleteWorksheetId(null)
+    setRenamingWorksheetId(activeSheetId)
+    setWorksheetNameDraft(worksheet.name)
+  }
+
+  function deleteActiveWorksheet() {
+    if (worksheets.length <= 1) {
+      setToast(
+        language === 'sv'
+          ? 'Minst ett arbetsblad måste finnas kvar.'
+          : 'At least one worksheet must remain.',
+      )
+      return
+    }
+    setRenamingWorksheetId(null)
+    setPendingDeleteWorksheetId(activeSheetId)
+  }
+
+  function confirmWorksheetDeletion() {
+    if (!pendingDeleteWorksheetId || !deleteWorksheetFromStore(pendingDeleteWorksheetId)) return
+    const state = useWorkbookStore.getState()
+    const nextWorksheet = state.worksheets.find((item) => item.id === state.activeSheetId)
+    setPendingDeleteWorksheetId(null)
+    setTargetColumn(nextWorksheet?.columns.find((column) => column.type === 'numeric')?.id ?? '')
+    setFilterQuery('')
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+    setToast(language === 'sv' ? 'Arbetsbladet har tagits bort.' : 'Worksheet deleted.')
   }
 
   function downloadFile(content: string, name: string, type: string) {
@@ -1350,10 +2331,11 @@ function App() {
   async function openProject(file?: File) {
     if (!file) return
     try {
-      const value = JSON.parse(await file.text()) as WorkbookSnapshot
-      if (!Array.isArray(value.columns) || !Array.isArray(value.rows))
-        throw new Error('Projektfilen har fel format.')
-      replaceData(value.columns, value.rows)
+      const value: unknown = JSON.parse(await file.text())
+      if (isWorkbookDocument(value)) replaceWorkbook(value)
+      else if (isWorkbookSnapshot(value)) replaceWorkbook(value)
+      else throw new Error('Projektfilen har fel format.')
+      setProjectName(file.name.replace(/\.(statlab|json)$/i, ''))
       setToast(`${file.name} öppnat.`)
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Projektet kunde inte öppnas.')
@@ -1375,9 +2357,49 @@ function App() {
     )
   }
 
+  function activateCell(row: number, column: number, extend: boolean) {
+    if (!extend) setSelectionAnchor({ row, column })
+    setActiveCell(row, column)
+  }
+
+  function extendActiveSelection(rowDelta: number, columnDelta: number) {
+    if (visibleRowIndexes.length === 0 || columns.length === 0) return
+    const visibleIndex = visibleRowIndexes.indexOf(activeCell.row)
+    const nextVisibleIndex = Math.max(
+      0,
+      Math.min(visibleRowIndexes.length - 1, visibleIndex + rowDelta),
+    )
+    const nextColumn = Math.max(0, Math.min(columns.length - 1, activeCell.column + columnDelta))
+    setActiveCell(visibleRowIndexes[nextVisibleIndex], nextColumn)
+  }
+
+  function handleCopy(event: ClipboardEvent<HTMLDivElement>) {
+    const rowCount = selectedBounds.lastRow - selectedBounds.firstRow + 1
+    const columnCount = selectedBounds.lastColumn - selectedBounds.firstColumn + 1
+    const target = event.target
+    if (
+      rowCount * columnCount <= 1 &&
+      target instanceof HTMLInputElement &&
+      target.selectionStart !== target.selectionEnd
+    ) {
+      return
+    }
+    event.clipboardData.setData(
+      'text/plain',
+      selectionToTsv(rows, columns, selectionAnchor, activeCell),
+    )
+    event.preventDefault()
+  }
+
   async function copySession() {
     if (!session) return
     const { summary } = session
+    const additionalResults = Object.fromEntries(
+      Object.entries(session).filter(
+        ([key, value]) =>
+          !['title', 'columnName', 'summary', 'createdAt'].includes(key) && value !== undefined,
+      ),
+    )
     const testResult = session.oneSampleT
       ? `\nt(${session.oneSampleT.degreesOfFreedom}): ${formatValue(session.oneSampleT.statistic)}\ndf: ${session.oneSampleT.degreesOfFreedom}\np-värde: ${formatPValue(session.oneSampleT.pValue, language)}\nKI: [${formatValue(session.oneSampleT.confidenceInterval[0])}, ${formatValue(session.oneSampleT.confidenceInterval[1])}]`
       : session.oneSampleZ
@@ -1422,13 +2444,53 @@ function App() {
                                               ? `\nA²: ${formatValue(session.normalAD.statistic)}\nJusterad A²: ${formatValue(session.normalAD.adjustedStatistic)}\np-värde: ${formatPValue(session.normalAD.pValue, language)}\nα: ${formatValue(session.normalAD.alpha)}`
                                               : session.normalKS
                                                 ? `\nD+: ${formatValue(session.normalKS.dPlus)}\nD−: ${formatValue(session.normalKS.dMinus)}\nD: ${formatValue(session.normalKS.statistic)}\np-värde: ${formatPValue(session.normalKS.pValue, language)}\nμ: ${formatValue(session.normalKS.hypothesizedMean)}\nσ: ${formatValue(session.normalKS.hypothesizedStandardDeviation)}`
-                                                : ''
+                                                : Object.keys(additionalResults).length > 0
+                                                  ? `\n${JSON.stringify(additionalResults, null, 2)}`
+                                                  : ''
     const summaryText = summary
       ? `\nAntal: ${summary.count}\nMedelvärde: ${formatValue(summary.mean)}\nMedian: ${formatValue(summary.median)}\nStandardavvikelse: ${formatValue(summary.standardDeviation)}\nVarians: ${formatValue(summary.variance)}\nStandardfel: ${formatValue(summary.standardError)}\nQ1 (R-7): ${formatValue(summary.firstQuartile)}\nQ3 (R-7): ${formatValue(summary.thirdQuartile)}\nVariationsbredd: ${formatValue(summary.range)}\nMin: ${formatValue(summary.minimum)}\nMax: ${formatValue(summary.maximum)}`
       : ''
     const text = `${session.title}: ${session.columnName}${summaryText}${testResult}\nEj verifierad analys.`
-    await navigator.clipboard.writeText(text)
-    setToast('Sessionsresultatet kopierat.')
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const field = document.createElement('textarea')
+      field.value = text
+      field.style.position = 'fixed'
+      field.style.opacity = '0'
+      document.body.append(field)
+      field.select()
+      const copied = document.execCommand('copy')
+      field.remove()
+      if (!copied) {
+        setToast(
+          language === 'sv' ? 'Sessionen kunde inte kopieras.' : 'The session could not be copied.',
+        )
+        return
+      }
+    }
+    setToast(language === 'sv' ? 'Sessionsresultatet kopierat.' : 'Session result copied.')
+  }
+
+  async function runCommand(action: string) {
+    setCommandPaletteOpen(false)
+    setCommandQuery('')
+    showMenuAction(action)
+  }
+
+  function toggleMenu(button: HTMLButtonElement, key: string) {
+    if (menuOpen === key) {
+      setMenuOpen(null)
+      return
+    }
+    const bounds = button.getBoundingClientRect()
+    const menuWidth = 224
+    const left =
+      bounds.left + menuWidth <= window.innerWidth - 8
+        ? bounds.left
+        : Math.max(8, bounds.right - menuWidth)
+    setMenuPosition({ top: bounds.bottom, left })
+    setMenuOpen(key)
   }
 
   return (
@@ -1441,8 +2503,9 @@ function App() {
           </span>
         </a>
         <div className="project-name">
-          <strong>Produktionsanalys</strong>
-          <span> / </span>Batchdata
+          <strong>{projectName}</strong>
+          <span> / </span>
+          {activeWorksheet ? worksheetName(activeWorksheet) : ''}
         </div>
         <div className="topbar-spacer" />
         <div className="topbar-note">
@@ -1465,11 +2528,25 @@ function App() {
           aria-label={t('language')}
           onClick={() => {
             const nextLanguage = language === 'sv' ? 'en' : 'sv'
-            setLanguage(nextLanguage)
-            void i18n.changeLanguage(nextLanguage)
+            changeLanguage(nextLanguage)
           }}
         >
           <Languages size={16} />
+        </button>
+        <button
+          className="command-search-button"
+          type="button"
+          title={language === 'sv' ? 'Sök kommando · Ctrl/Cmd+K' : 'Search commands · Ctrl/Cmd+K'}
+          aria-label={language === 'sv' ? 'Sök kommando' : 'Search commands'}
+          onClick={() => {
+            setCommandQuery('')
+            setCommandIndex(0)
+            setCommandPaletteOpen(true)
+          }}
+        >
+          <Search size={15} />
+          <span>{language === 'sv' ? 'Sök kommando' : 'Search'}</span>
+          <kbd>Ctrl K</kbd>
         </button>
       </header>
 
@@ -1480,18 +2557,23 @@ function App() {
             className="menu-button"
             type="button"
             aria-expanded={menuOpen === key}
-            onClick={() => setMenuOpen(menuOpen === key ? null : key)}
+            onClick={(event) => toggleMenu(event.currentTarget, key)}
           >
             {t(key)}
           </button>
         ))}
         {menuOpen && (
-          <div className="menu-popover" role="menu">
+          <div
+            className="menu-popover"
+            role="menu"
+            style={{ top: menuPosition.top, left: menuPosition.left }}
+          >
             {menuContent[menuOpen].map((action) => (
               <button
                 key={action}
                 type="button"
                 role="menuitem"
+                disabled={action === 'copySession' && !session}
                 onClick={() => showMenuAction(action)}
               >
                 {actionLabelKeys[action] ? t(actionLabelKeys[action]) : action}
@@ -1581,15 +2663,21 @@ function App() {
           <div className="nav-heading">
             PROJEKT <MoreHorizontal size={15} />
           </div>
-          <div className="nav-section">Arbetsbok</div>
-          <button
-            className="nav-item active"
-            type="button"
-            onClick={() => setToast('Arbetsblad 1 är aktivt.')}
-          >
-            <Grid2X2 size={14} />
-            Arbetsblad 1<span className="nav-count">{rows.length}</span>
-          </button>
+          <div className="nav-section">{language === 'sv' ? 'Arbetsbok' : 'Workbook'}</div>
+          {worksheets.map((worksheet) => (
+            <button
+              className={`nav-item${worksheet.id === activeSheetId ? ' active' : ''}`}
+              type="button"
+              key={worksheet.id}
+              onClick={() => openWorksheet(worksheet.id)}
+            >
+              <Grid2X2 size={14} />
+              {worksheetName(worksheet)}
+              <span className="nav-count">
+                {worksheet.id === activeSheetId ? rows.length : worksheet.rows.length}
+              </span>
+            </button>
+          ))}
           <div className="nav-section">Session</div>
           <button
             className="nav-item"
@@ -1613,33 +2701,35 @@ function App() {
               {session.title}
             </button>
           )}
-          <div className="nav-section">Utdata</div>
+          <div className="nav-section">{language === 'sv' ? 'Utdata' : 'Output'}</div>
           <button
             className="nav-item"
             type="button"
-            onClick={() => setToast('Grafer kommer i en senare fas.')}
+            onClick={() => {
+              if (graphCount === 0) setGraphDialogOpen(true)
+              else {
+                const panel = document.getElementById('session')
+                panel?.scrollIntoView({ behavior: 'smooth' })
+                panel?.focus()
+              }
+            }}
           >
             <Activity size={14} />
-            Grafer<span className="nav-count">0</span>
-          </button>
-          <button
-            className="nav-item"
-            type="button"
-            onClick={() => setToast('Makron kommer i en senare fas.')}
-          >
-            <FileText size={14} />
-            Makron<span className="nav-count">0</span>
+            {language === 'sv' ? 'Grafer' : 'Graphs'}
+            <span className="nav-count">{graphCount}</span>
           </button>
           <div className="nav-bottom">
-            Lokal arbetsbok
+            {language === 'sv' ? 'Lokal arbetsbok' : 'Local workbook'}
             <br />
-            Senast sparad{' '}
+            {language === 'sv' ? 'Senast sparad' : 'Last saved'}{' '}
             {savedAt
               ? savedAt.toLocaleTimeString(i18n.language === 'sv' ? 'sv-SE' : 'en-US', {
                   hour: '2-digit',
                   minute: '2-digit',
                 })
-              : 'nyss'}
+              : language === 'sv'
+                ? 'nyss'
+                : 'just now'}
             <div className="verification-chip">
               <CircleHelp size={11} />
               {t('unverified')}
@@ -1647,15 +2737,17 @@ function App() {
           </div>
         </aside>
 
-        <main className="main-column" id="arbetsblad">
+        <main className="main-column" id="arbetsblad" tabIndex={-1}>
           <div className="sheet-heading">
             <div>
-              <div className="eyebrow">DATA · PRODUKTION</div>
-              <h1>{language === 'sv' ? 'Batchresultat' : 'Batch results'}</h1>
+              <div className="eyebrow">
+                {language === 'sv' ? 'DATA · ARBETSBOK' : 'DATA · WORKBOOK'}
+              </div>
+              <h1>{activeWorksheet ? worksheetName(activeWorksheet) : t('sheet')}</h1>
               <p>
                 {language === 'sv'
-                  ? 'Utbyte från linje 04 · provtagning vecka 42'
-                  : 'Yield from line 04 · week 42 sampling'}
+                  ? `${rows.length} rader · ${columns.length} kolumner`
+                  : `${rows.length} rows · ${columns.length} columns`}
               </p>
             </div>
             <div className="heading-actions">
@@ -1682,23 +2774,147 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="sheet-tabs">
-            <button className="sheet-tab active" type="button">
-              <Grid2X2 size={13} />
-              {t('sheet')}
-            </button>
+          <div
+            className="sheet-tabs"
+            role="group"
+            aria-label={language === 'sv' ? 'Arbetsblad' : 'Worksheets'}
+          >
+            {worksheets.map((worksheet) =>
+              renamingWorksheetId === worksheet.id ? (
+                <form
+                  className="sheet-tab-editing"
+                  key={worksheet.id}
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const renamed = renameWorksheetInStore(worksheet.id, worksheetNameDraft)
+                    if (!renamed) {
+                      setToast(
+                        language === 'sv'
+                          ? 'Namnet måste vara unikt och får inte vara tomt.'
+                          : 'Name must be unique and cannot be blank.',
+                      )
+                      return
+                    }
+                    setRenamingWorksheetId(null)
+                    setToast(
+                      language === 'sv' ? 'Arbetsbladet har bytt namn.' : 'Worksheet renamed.',
+                    )
+                  }}
+                >
+                  <input
+                    autoFocus
+                    maxLength={64}
+                    value={worksheetNameDraft}
+                    onChange={(event) => setWorksheetNameDraft(event.target.value)}
+                    aria-label={language === 'sv' ? 'Nytt arbetsbladsnamn' : 'New worksheet name'}
+                  />
+                  <button
+                    className="icon-button"
+                    type="submit"
+                    title={language === 'sv' ? 'Spara namn' : 'Save name'}
+                    aria-label={language === 'sv' ? 'Spara namn' : 'Save name'}
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    title={language === 'sv' ? 'Avbryt namnbyte' : 'Cancel rename'}
+                    aria-label={language === 'sv' ? 'Avbryt namnbyte' : 'Cancel rename'}
+                    onClick={() => setRenamingWorksheetId(null)}
+                  >
+                    <X size={14} />
+                  </button>
+                </form>
+              ) : (
+                <button
+                  className={`sheet-tab${worksheet.id === activeSheetId ? ' active' : ''}`}
+                  type="button"
+                  key={worksheet.id}
+                  aria-pressed={worksheet.id === activeSheetId}
+                  onClick={() => openWorksheet(worksheet.id)}
+                >
+                  <Grid2X2 size={13} />
+                  {worksheetName(worksheet)}
+                </button>
+              ),
+            )}
             <button
               className="sheet-tab add-tab"
               type="button"
-              title={
-                language === 'sv' ? 'Nytt arbetsblad kommer senare' : 'New worksheet coming later'
-              }
-              onClick={() => setToast('Flera arbetsblad kommer i en senare fas.')}
+              title={language === 'sv' ? 'Nytt arbetsblad' : 'New worksheet'}
+              aria-label={language === 'sv' ? 'Nytt arbetsblad' : 'New worksheet'}
+              onClick={addWorksheet}
             >
               <Plus size={14} />
             </button>
+            <div
+              className="worksheet-actions"
+              role="group"
+              aria-label={language === 'sv' ? 'Arbetsbladsåtgärder' : 'Worksheet actions'}
+            >
+              <button
+                className="icon-button"
+                type="button"
+                title={language === 'sv' ? 'Byt namn på arbetsbladet' : 'Rename worksheet'}
+                aria-label={language === 'sv' ? 'Byt namn på arbetsbladet' : 'Rename worksheet'}
+                onClick={renameActiveWorksheet}
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                disabled={worksheets.length <= 1}
+                title={
+                  worksheets.length <= 1
+                    ? language === 'sv'
+                      ? 'Minst ett arbetsblad måste finnas kvar'
+                      : 'At least one worksheet must remain'
+                    : language === 'sv'
+                      ? 'Ta bort arbetsbladet'
+                      : 'Delete worksheet'
+                }
+                aria-label={language === 'sv' ? 'Ta bort arbetsbladet' : 'Delete worksheet'}
+                onClick={deleteActiveWorksheet}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+            {pendingDeleteWorksheetId === activeSheetId && (
+              <div
+                className="worksheet-delete-confirm"
+                role="group"
+                aria-label={language === 'sv' ? 'Bekräfta borttagning' : 'Confirm deletion'}
+              >
+                <span>
+                  {language === 'sv'
+                    ? `Ta bort "${activeWorksheet ? worksheetName(activeWorksheet) : ''}"?`
+                    : `Delete "${activeWorksheet ? worksheetName(activeWorksheet) : ''}"?`}
+                </span>
+                <button
+                  className="icon-button"
+                  type="button"
+                  autoFocus
+                  title={language === 'sv' ? 'Bekräfta borttagning' : 'Confirm deletion'}
+                  aria-label={language === 'sv' ? 'Bekräfta borttagning' : 'Confirm deletion'}
+                  onClick={confirmWorksheetDeletion}
+                >
+                  <Check size={14} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  title={language === 'sv' ? 'Avbryt' : 'Cancel'}
+                  aria-label={language === 'sv' ? 'Avbryt' : 'Cancel'}
+                  onClick={() => setPendingDeleteWorksheetId(null)}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
           </div>
-          <div className="sheet-scroll" ref={scrollRef} onPaste={handlePaste}>
+          <div className="sheet-scroll" ref={scrollRef} onCopy={handleCopy} onPaste={handlePaste}>
             <table
               className="data-table"
               aria-label={language === 'sv' ? 'Redigerbart datablad' : 'Editable worksheet'}
@@ -1759,13 +2975,36 @@ function App() {
                     <tr key={rowIndex}>
                       <td className="row-number">{rowIndex + 1}</td>
                       {columns.map((column, columnIndex) => (
-                        <td className="cell" key={column.id}>
+                        <td
+                          className={`cell${
+                            rowIndex >= selectedBounds.firstRow &&
+                            rowIndex <= selectedBounds.lastRow &&
+                            columnIndex >= selectedBounds.firstColumn &&
+                            columnIndex <= selectedBounds.lastColumn
+                              ? ' selected'
+                              : ''
+                          }`}
+                          key={column.id}
+                        >
                           <GridCell
                             key={`${rowIndex}-${column.id}-${row[column.id] ?? ''}`}
                             rowIndex={rowIndex}
                             column={column}
                             value={row[column.id] ?? ''}
-                            onActivate={() => setActiveCell(rowIndex, columnIndex)}
+                            isActive={
+                              activeCell.row === rowIndex && activeCell.column === columnIndex
+                            }
+                            isSelected={
+                              rowIndex >= selectedBounds.firstRow &&
+                              rowIndex <= selectedBounds.lastRow &&
+                              columnIndex >= selectedBounds.firstColumn &&
+                              columnIndex <= selectedBounds.lastColumn
+                            }
+                            isDragging={isDraggingSelection}
+                            onActivate={(extend) => activateCell(rowIndex, columnIndex, extend)}
+                            onExtendSelection={extendActiveSelection}
+                            onDragStart={() => setIsDraggingSelection(true)}
+                            onDragEnter={() => activateCell(rowIndex, columnIndex, true)}
                             onDraftChange={setHasDraft}
                             onCommit={(value) => setCell(rowIndex, column.id, value)}
                           />
@@ -1802,7 +3041,7 @@ function App() {
           </div>
         </main>
 
-        <aside className="session-panel" id="session" aria-label={t('session')}>
+        <aside className="session-panel" id="session" aria-label={t('session')} tabIndex={-1}>
           <div className="session-title">
             <h2>{t('session')}</h2>
             <span>{session ? '1 resultat' : 'redo'}</span>
@@ -2449,6 +3688,911 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.oneWayAnova && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Envägs-ANOVA-resultat' : 'One-way ANOVA result'}
+                >
+                  <h4>{language === 'sv' ? 'Envägs-ANOVA' : 'One-way ANOVA'}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Grupper' : 'Groups'}</span>
+                      <strong>{session.oneWayAnova.groupCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        F ({session.oneWayAnova.betweenGroupDegreesOfFreedom},{' '}
+                        {session.oneWayAnova.withinGroupDegreesOfFreedom})
+                      </span>
+                      <strong>{formatValue(session.oneWayAnova.fStatistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p-värde</span>
+                      <strong>{formatPValue(session.oneWayAnova.pValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>η²</span>
+                      <strong>{formatValue(session.oneWayAnova.etaSquared)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>ω²</span>
+                      <strong>{formatValue(session.oneWayAnova.omegaSquared)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.oneWayAnova.alpha)}</strong>
+                    </div>
+                  </div>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Variationskälla' : 'Source'}</th>
+                          <th scope="col">SS</th>
+                          <th scope="col">df</th>
+                          <th scope="col">MS</th>
+                          <th scope="col">F</th>
+                          <th scope="col">p</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <th scope="row">
+                            {language === 'sv' ? 'Mellan grupper' : 'Between groups'}
+                          </th>
+                          <td>{formatValue(session.oneWayAnova.betweenGroupSumSquares)}</td>
+                          <td>{session.oneWayAnova.betweenGroupDegreesOfFreedom}</td>
+                          <td>{formatValue(session.oneWayAnova.betweenGroupMeanSquare)}</td>
+                          <td>{formatValue(session.oneWayAnova.fStatistic)}</td>
+                          <td>{formatPValue(session.oneWayAnova.pValue, language)}</td>
+                        </tr>
+                        <tr>
+                          <th scope="row">
+                            {language === 'sv' ? 'Inom grupper' : 'Within groups'}
+                          </th>
+                          <td>{formatValue(session.oneWayAnova.withinGroupSumSquares)}</td>
+                          <td>{session.oneWayAnova.withinGroupDegreesOfFreedom}</td>
+                          <td>{formatValue(session.oneWayAnova.withinGroupMeanSquare)}</td>
+                          <td />
+                          <td />
+                        </tr>
+                        <tr>
+                          <th scope="row">{language === 'sv' ? 'Totalt' : 'Total'}</th>
+                          <td>{formatValue(session.oneWayAnova.totalSumSquares)}</td>
+                          <td>{session.oneWayAnova.count - 1}</td>
+                          <td />
+                          <td />
+                          <td />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Grupp' : 'Group'}</th>
+                          <th scope="col">n</th>
+                          <th scope="col">{language === 'sv' ? 'Medel' : 'Mean'}</th>
+                          <th scope="col">s</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.oneWayAnova.groups.map((group) => (
+                          <tr key={group.group}>
+                            <th scope="row">{group.group}</th>
+                            <td>{group.count}</td>
+                            <td>{formatValue(group.mean)}</td>
+                            <td>{formatValue(group.standardDeviation)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <h4>
+                    {language === 'sv'
+                      ? 'Tukey-Kramer parjämförelser'
+                      : 'Tukey-Kramer pairwise comparisons'}
+                  </h4>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Jämförelse' : 'Comparison'}</th>
+                          <th scope="col">
+                            {language === 'sv' ? 'Medelskillnad' : 'Mean difference'}
+                          </th>
+                          <th scope="col">q</th>
+                          <th scope="col">{language === 'sv' ? 'Justerat p' : 'Adjusted p'}</th>
+                          <th scope="col">{language === 'sv' ? 'KI' : 'CI'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.oneWayAnova.pairwise.map((pair) => (
+                          <tr key={`${pair.group1}-${pair.group2}`}>
+                            <th scope="row">
+                              {pair.group1} − {pair.group2}
+                            </th>
+                            <td>{formatValue(pair.meanDifference)}</td>
+                            <td>{formatValue(pair.qStatistic)}</td>
+                            <td>{formatPValue(pair.adjustedPValue, language)}</td>
+                            <td>
+                              {formatValue(pair.confidenceInterval[0])} to{' '}
+                              {formatValue(pair.confidenceInterval[1])}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Tukey-Kramer använder numerisk integrering av studentized-range-fördelningen. Normalitet, oberoende och lika varians har inte testats; kontrollera särskilt små grupper och extrema residualer.'
+                      : 'Tukey-Kramer uses numerical integration of the studentized-range distribution. Normality, independence, and equal variance were not tested; inspect small groups and extreme residuals.'}
+                  </p>
+                </section>
+              )}
+              {session.twoLevelFactorial && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'DOE-resultat' : 'DOE result'}
+                >
+                  <h4>
+                    {language === 'sv' ? '2-nivåers faktorförsök' : 'Two-level factorial DOE'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Körningar' : 'Runs'}</span>
+                      <strong>{session.twoLevelFactorial.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Faktorer' : 'Factors'}</span>
+                      <strong>{session.twoLevelFactorial.factorCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>R²</span>
+                      <strong>{formatValue(session.twoLevelFactorial.rSquared)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Fel-df' : 'Error df'}</span>
+                      <strong>{session.twoLevelFactorial.errorDegreesOfFreedom}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.twoLevelFactorial.alpha)}</strong>
+                    </div>
+                  </div>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Term</th>
+                          <th scope="col">{language === 'sv' ? 'Koefficient' : 'Coefficient'}</th>
+                          <th scope="col">{language === 'sv' ? 'Effekt' : 'Effect'}</th>
+                          <th scope="col">SS</th>
+                          <th scope="col">F</th>
+                          <th scope="col">p</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.twoLevelFactorial.effects.map((effect) => (
+                          <tr key={effect.term}>
+                            <th scope="row">{effect.term}</th>
+                            <td>{formatValue(effect.coefficient)}</td>
+                            <td>{formatValue(effect.effect)}</td>
+                            <td>{formatValue(effect.sumSquares)}</td>
+                            <td>{formatValue(effect.fStatistic)}</td>
+                            <td>{formatPValue(effect.pValue, language)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `Fullfaktoriell ortogonal modell; fel-MS ${formatValue(session.twoLevelFactorial.errorMeanSquare)}. Resultaten är inte oberoende referensverifierade.`
+                      : `Orthogonal full-factorial model; error MS ${formatValue(session.twoLevelFactorial.errorMeanSquare)}. Results are not independently reference-verified.`}
+                  </p>
+                </section>
+              )}
+              {session.twoWayAnova && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Tvåvägs-ANOVA-resultat' : 'Two-way ANOVA result'}
+                >
+                  <h4>{language === 'sv' ? 'Tvåvägs-ANOVA' : 'Two-way ANOVA'}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Observationer' : 'Observations'}</span>
+                      <strong>{session.twoWayAnova.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{session.twoWayAnova.factor1Name}</span>
+                      <strong>{session.twoWayAnova.factor1Levels.length}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{session.twoWayAnova.factor2Name}</span>
+                      <strong>{session.twoWayAnova.factor2Levels.length}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Replikat/cell' : 'Replicates/cell'}</span>
+                      <strong>{session.twoWayAnova.replicateCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Fel-MS' : 'Error MS'}</span>
+                      <strong>{formatValue(session.twoWayAnova.errorMeanSquare)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.twoWayAnova.alpha)}</strong>
+                    </div>
+                  </div>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Variationskälla' : 'Source'}</th>
+                          <th scope="col">SS</th>
+                          <th scope="col">df</th>
+                          <th scope="col">MS</th>
+                          <th scope="col">F</th>
+                          <th scope="col">p</th>
+                          <th scope="col">{language === 'sv' ? 'η² partiell' : 'Partial η²'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.twoWayAnova.table.map((row) => {
+                          const source = {
+                            factor1: session.twoWayAnova!.factor1Name,
+                            factor2: session.twoWayAnova!.factor2Name,
+                            interaction: `${session.twoWayAnova!.factor1Name} × ${session.twoWayAnova!.factor2Name}`,
+                            error: language === 'sv' ? 'Fel' : 'Error',
+                            total: language === 'sv' ? 'Totalt' : 'Total',
+                          }[row.source]
+                          return (
+                            <tr key={row.source}>
+                              <th scope="row">{source}</th>
+                              <td>{formatValue(row.sumSquares)}</td>
+                              <td>{row.degreesOfFreedom}</td>
+                              <td>{row.meanSquare === null ? '' : formatValue(row.meanSquare)}</td>
+                              <td>{row.fStatistic === null ? '' : formatValue(row.fStatistic)}</td>
+                              <td>
+                                {row.pValue === null ? '' : formatPValue(row.pValue, language)}
+                              </td>
+                              <td>
+                                {row.partialEtaSquared === null
+                                  ? ''
+                                  : formatValue(row.partialEtaSquared)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{session.twoWayAnova.factor1Name}</th>
+                          <th scope="col">{session.twoWayAnova.factor2Name}</th>
+                          <th scope="col">n</th>
+                          <th scope="col">{language === 'sv' ? 'Medel' : 'Mean'}</th>
+                          <th scope="col">s</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.twoWayAnova.cellMeans.map((cell) => (
+                          <tr key={`${cell.factor1}-${cell.factor2}`}>
+                            <th scope="row">{cell.factor1}</th>
+                            <td>{cell.factor2}</td>
+                            <td>{cell.count}</td>
+                            <td>{formatValue(cell.mean)}</td>
+                            <td>{formatValue(cell.standardDeviation)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Balanserad modell med interaktion. Normalitet, oberoende och homogen varians har inte testats; obalanserade data stöds inte.'
+                      : 'Balanced model with interaction. Normality, independence, and equal variance were not tested; unbalanced data are not supported.'}
+                  </p>
+                </section>
+              )}
+              {session.linearRegression && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Regressionsresultat' : 'Regression result'}
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Multipel linjär regression'
+                      : 'Multiple linear regression'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.linearRegression.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Borttagna rader' : 'Rows excluded'}</span>
+                      <strong>{session.linearRegression.droppedCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>R²</span>
+                      <strong>{formatValue(session.linearRegression.rSquared)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Justerat R²' : 'Adjusted R²'}</span>
+                      <strong>{formatValue(session.linearRegression.adjustedRSquared)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        F ({session.linearRegression.predictorNames.length},
+                        {session.linearRegression.degreesOfFreedom})
+                      </span>
+                      <strong>{formatValue(session.linearRegression.fStatistic)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Modell-p' : 'Model p'}</span>
+                      <strong>
+                        {formatPValue(session.linearRegression.modelPValue, language)}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Durbin–Watson' : 'Durbin–Watson'}</span>
+                      <strong>{formatValue(session.linearRegression.durbinWatson)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.linearRegression.alpha)}</strong>
+                    </div>
+                  </div>
+                  <h4>{language === 'sv' ? 'Koefficienter' : 'Coefficients'}</h4>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Term' : 'Term'}</th>
+                          <th scope="col">{language === 'sv' ? 'Skattning' : 'Estimate'}</th>
+                          <th scope="col">SE</th>
+                          <th scope="col">t</th>
+                          <th scope="col">p</th>
+                          <th scope="col">{language === 'sv' ? 'KI' : 'CI'}</th>
+                          <th scope="col">VIF</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.linearRegression.coefficients.map((coefficient) => (
+                          <tr key={coefficient.term}>
+                            <th scope="row">{coefficient.term}</th>
+                            <td>{formatValue(coefficient.estimate)}</td>
+                            <td>{formatValue(coefficient.standardError)}</td>
+                            <td>{formatValue(coefficient.tStatistic)}</td>
+                            <td>{formatPValue(coefficient.pValue, language)}</td>
+                            <td>
+                              {formatValue(coefficient.confidenceInterval[0])} to{' '}
+                              {formatValue(coefficient.confidenceInterval[1])}
+                            </td>
+                            <td>{coefficient.vif === null ? '' : formatValue(coefficient.vif)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <h4>{language === 'sv' ? 'Variansanalys' : 'Analysis of variance'}</h4>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Källa' : 'Source'}</th>
+                          <th scope="col">SS</th>
+                          <th scope="col">df</th>
+                          <th scope="col">MS</th>
+                          <th scope="col">F</th>
+                          <th scope="col">p</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.linearRegression.anova.map((row) => (
+                          <tr key={row.source}>
+                            <th scope="row">
+                              {row.source === 'regression'
+                                ? language === 'sv'
+                                  ? 'Regression'
+                                  : 'Regression'
+                                : row.source === 'error'
+                                  ? language === 'sv'
+                                    ? 'Fel'
+                                    : 'Error'
+                                  : language === 'sv'
+                                    ? 'Totalt'
+                                    : 'Total'}
+                            </th>
+                            <td>{formatValue(row.sumSquares)}</td>
+                            <td>{row.degreesOfFreedom}</td>
+                            <td>{row.meanSquare === null ? '' : formatValue(row.meanSquare)}</td>
+                            <td>{row.fStatistic === null ? '' : formatValue(row.fStatistic)}</td>
+                            <td>{row.pValue === null ? '' : formatPValue(row.pValue, language)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="regression-diagnostics-heading">
+                    <h4>{language === 'sv' ? 'Residualdiagnostik' : 'Residual diagnostics'}</h4>
+                    <button
+                      className="toolbar-button"
+                      type="button"
+                      onClick={exportLinearRegressionDiagnostics}
+                    >
+                      <Download size={14} />
+                      {language === 'sv' ? 'Exportera alla' : 'Export all'}
+                    </button>
+                  </div>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Rad' : 'Row'}</th>
+                          <th scope="col">{language === 'sv' ? 'Observerat' : 'Observed'}</th>
+                          <th scope="col">{language === 'sv' ? 'Skattat' : 'Fitted'}</th>
+                          <th scope="col">{language === 'sv' ? 'Residual' : 'Residual'}</th>
+                          <th scope="col">{language === 'sv' ? 'Hävstång' : 'Leverage'}</th>
+                          <th scope="col">Cook's D</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.linearRegression.observations.slice(0, 50).map((observation) => (
+                          <tr key={observation.sourceRow}>
+                            <th scope="row">{observation.sourceRow}</th>
+                            <td>{formatValue(observation.observed)}</td>
+                            <td>{formatValue(observation.fitted)}</td>
+                            <td>{formatValue(observation.residual)}</td>
+                            <td>{formatValue(observation.leverage)}</td>
+                            <td>{formatValue(observation.cooksDistance)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? `QR-regression med intercept; visar högst 50 av ${session.linearRegression.count} residualrader. Inkompletta rader har uteslutits. Normalitet, oberoende och konstant varians har inte testats.`
+                      : `QR regression with intercept; showing up to 50 of ${session.linearRegression.count} residual rows. Incomplete rows were excluded. Normality, independence, and constant variance were not tested.`}
+                  </p>
+                </section>
+              )}
+              {session.nonparametric && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv'
+                      ? 'Icke-parametriskt testresultat'
+                      : 'Nonparametric test result'
+                  }
+                >
+                  <h4>
+                    {session.nonparametric.kind === 'mannWhitney'
+                      ? 'Mann–Whitney'
+                      : session.nonparametric.kind === 'kruskalWallis'
+                        ? 'Kruskal–Wallis'
+                        : session.nonparametric.kind === 'sign'
+                          ? language === 'sv'
+                            ? 'Teckentest'
+                            : 'Sign test'
+                          : session.nonparametric.kind === 'runs'
+                            ? language === 'sv'
+                              ? 'Runs-test'
+                              : 'Runs test'
+                            : session.nonparametric.kind === 'wilcoxon'
+                              ? 'Wilcoxon signed-rank'
+                              : session.nonparametric.kind === 'moodMedian'
+                                ? 'Mood-median'
+                                : 'Friedman'}
+                  </h4>
+                  {session.nonparametric.kind === 'mannWhitney' && (
+                    <div className="stat-grid t-test-grid">
+                      <div className="stat-cell">
+                        <span>U</span>
+                        <strong>{formatValue(session.nonparametric.result.uStatistic)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>Z</span>
+                        <strong>{formatValue(session.nonparametric.result.zStatistic)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>p-värde</span>
+                        <strong>
+                          {formatPValue(session.nonparametric.result.pValue, language)}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>n₁ / n₂</span>
+                        <strong>
+                          {session.nonparametric.result.count1} /{' '}
+                          {session.nonparametric.result.count2}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>Rank-biserial r</span>
+                        <strong>
+                          {formatValue(session.nonparametric.result.rankBiserialCorrelation)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+                  {session.nonparametric.kind === 'kruskalWallis' && (
+                    <>
+                      <div className="stat-grid t-test-grid">
+                        <div className="stat-cell">
+                          <span>H</span>
+                          <strong>{formatValue(session.nonparametric.result.statistic)}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>df</span>
+                          <strong>{session.nonparametric.result.degreesOfFreedom}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>p-värde</span>
+                          <strong>
+                            {formatPValue(session.nonparametric.result.pValue, language)}
+                          </strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>{language === 'sv' ? 'Tie-korrigering' : 'Tie correction'}</span>
+                          <strong>{formatValue(session.nonparametric.result.tieCorrection)}</strong>
+                        </div>
+                      </div>
+                      <div className="contingency-scroll">
+                        <table className="contingency-table">
+                          <thead>
+                            <tr>
+                              <th>{language === 'sv' ? 'Grupp' : 'Group'}</th>
+                              <th>n</th>
+                              <th>{language === 'sv' ? 'Median' : 'Median'}</th>
+                              <th>{language === 'sv' ? 'Medelrang' : 'Mean rank'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {session.nonparametric.result.groups.map((group) => (
+                              <tr key={group.group}>
+                                <th scope="row">{group.group}</th>
+                                <td>{group.count}</td>
+                                <td>{formatValue(group.median)}</td>
+                                <td>{formatValue(group.meanRank)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  {session.nonparametric.kind === 'sign' && (
+                    <div className="stat-grid t-test-grid">
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Median under H₀' : 'Median under H₀'}</span>
+                        <strong>
+                          {formatValue(session.nonparametric.result.hypothesizedMedian)}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Positiva' : 'Positive'}</span>
+                        <strong>{session.nonparametric.result.positive}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Negativa' : 'Negative'}</span>
+                        <strong>{session.nonparametric.result.negative}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Ties exkluderade' : 'Ties excluded'}</span>
+                        <strong>{session.nonparametric.result.ties}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>p-värde</span>
+                        <strong>
+                          {formatPValue(session.nonparametric.result.pValue, language)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+                  {session.nonparametric.kind === 'runs' && (
+                    <div className="stat-grid t-test-grid">
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Median' : 'Median'}</span>
+                        <strong>{formatValue(session.nonparametric.result.median)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Observerade runs' : 'Observed runs'}</span>
+                        <strong>{session.nonparametric.result.runs}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Förväntade runs' : 'Expected runs'}</span>
+                        <strong>{formatValue(session.nonparametric.result.expectedRuns)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>Z</span>
+                        <strong>{formatValue(session.nonparametric.result.zStatistic)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>p-värde</span>
+                        <strong>
+                          {formatPValue(session.nonparametric.result.pValue, language)}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Ties exkluderade' : 'Ties excluded'}</span>
+                        <strong>{session.nonparametric.result.ties}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {session.nonparametric.kind === 'wilcoxon' && (
+                    <div className="stat-grid t-test-grid">
+                      <div className="stat-cell">
+                        <span>W</span>
+                        <strong>{formatValue(session.nonparametric.result.statistic)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>Z</span>
+                        <strong>{formatValue(session.nonparametric.result.zStatistic)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>p-värde</span>
+                        <strong>
+                          {formatPValue(session.nonparametric.result.pValue, language)}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>Hodges–Lehmann</span>
+                        <strong>
+                          {formatValue(session.nonparametric.result.hodgesLehmannEstimate)}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Nollskillnader' : 'Zero differences'}</span>
+                        <strong>{session.nonparametric.result.zeroDifferences}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>n</span>
+                        <strong>{session.nonparametric.result.count}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {session.nonparametric.kind === 'moodMedian' && (
+                    <>
+                      <div className="stat-grid t-test-grid">
+                        <div className="stat-cell">
+                          <span>{language === 'sv' ? 'Poolad median' : 'Pooled median'}</span>
+                          <strong>{formatValue(session.nonparametric.result.median)}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>χ²</span>
+                          <strong>{formatValue(session.nonparametric.result.statistic)}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>df</span>
+                          <strong>{session.nonparametric.result.degreesOfFreedom}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>p-värde</span>
+                          <strong>
+                            {formatPValue(session.nonparametric.result.pValue, language)}
+                          </strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>{language === 'sv' ? 'Ties exkluderade' : 'Ties excluded'}</span>
+                          <strong>{session.nonparametric.result.tiesExcluded}</strong>
+                        </div>
+                      </div>
+                      <div className="contingency-scroll">
+                        <table className="contingency-table">
+                          <thead>
+                            <tr>
+                              <th>{language === 'sv' ? 'Grupp' : 'Group'}</th>
+                              <th>{language === 'sv' ? 'Under median' : 'Below median'}</th>
+                              <th>{language === 'sv' ? 'Över median' : 'Above median'}</th>
+                              <th>{language === 'sv' ? 'Ties' : 'Ties'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {session.nonparametric.result.groups.map((group) => (
+                              <tr key={group.group}>
+                                <th scope="row">{group.group}</th>
+                                <td>{group.below}</td>
+                                <td>{group.above}</td>
+                                <td>{group.ties}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  {session.nonparametric.kind === 'friedman' && (
+                    <>
+                      <div className="stat-grid t-test-grid">
+                        <div className="stat-cell">
+                          <span>Q</span>
+                          <strong>{formatValue(session.nonparametric.result.statistic)}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>df</span>
+                          <strong>{session.nonparametric.result.degreesOfFreedom}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>p-värde</span>
+                          <strong>
+                            {formatPValue(session.nonparametric.result.pValue, language)}
+                          </strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>{language === 'sv' ? 'Kompletta block' : 'Complete blocks'}</span>
+                          <strong>{session.nonparametric.result.blocks}</strong>
+                        </div>
+                        <div className="stat-cell">
+                          <span>{language === 'sv' ? 'Tie-korrigering' : 'Tie correction'}</span>
+                          <strong>{formatValue(session.nonparametric.result.tieCorrection)}</strong>
+                        </div>
+                      </div>
+                      <div className="contingency-scroll">
+                        <table className="contingency-table">
+                          <thead>
+                            <tr>
+                              <th>{language === 'sv' ? 'Behandling' : 'Treatment'}</th>
+                              <th>{language === 'sv' ? 'Medelrang' : 'Mean rank'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {session.nonparametric.result.treatments.map((treatment) => (
+                              <tr key={treatment.treatment}>
+                                <th scope="row">{treatment.treatment}</th>
+                                <td>{formatValue(treatment.meanRank)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  <p className="session-caption">
+                    {session.nonparametric.kind === 'sign'
+                      ? language === 'sv'
+                        ? `Exakt binomialtest; ties uteslutna. Beslut jämförs med α = ${formatValue(session.nonparametric.result.alpha)}.`
+                        : `Exact binomial test; ties excluded. Decision uses α = ${formatValue(session.nonparametric.result.alpha)}.`
+                      : session.nonparametric.kind === 'wilcoxon'
+                        ? language === 'sv'
+                          ? `Wilcoxon signed-rank använder normalapproximation med tie- och nollskillnadshantering; Walsh-medelvärden ger Hodges–Lehmann-skattningen. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                          : `Wilcoxon signed-rank uses a normal approximation with tie and zero handling; Walsh averages provide the Hodges–Lehmann estimate. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                        : session.nonparametric.kind === 'moodMedian'
+                          ? language === 'sv'
+                            ? `Mood-median använder chi-tvåapproximation för antal under/över poolad median; median-ties utesluts. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                            : `Mood median uses a chi-square approximation for counts below/above the pooled median; median ties are excluded. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                          : session.nonparametric.kind === 'friedman'
+                            ? language === 'sv'
+                              ? `Friedman rangordnar behandlingar inom block och använder tie-korrigerad chi-tvåapproximation. Post-hoc-jämförelser ingår inte. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                              : `Friedman ranks treatments within blocks and uses a tie-corrected chi-square approximation. Post-hoc comparisons are not included. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                            : session.nonparametric.kind === 'mannWhitney'
+                              ? language === 'sv'
+                                ? `Normalapproximation med tie- och kontinuitetskorrigering. α = ${formatValue(session.nonparametric.result.alpha)}; formskillnad testas inte separat.`
+                                : `Normal approximation with tie and continuity corrections. α = ${formatValue(session.nonparametric.result.alpha)}; distribution shape is not tested separately.`
+                              : session.nonparametric.kind === 'kruskalWallis'
+                                ? language === 'sv'
+                                  ? `Chi-tvåapproximation med tie-korrigering; signifikant H anger att minst en grupp skiljer sig. Post-hoc-jämförelser ingår inte. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                                  : `Tie-corrected chi-square approximation; significant H indicates at least one group differs. Post-hoc comparisons are not included. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                                : language === 'sv'
+                                  ? `Runs-test med normalapproximation runt stickprovsmedianen; ties uteslutna och oberoende antas. α = ${formatValue(session.nonparametric.result.alpha)}.`
+                                  : `Runs test uses a normal approximation around the sample median; ties excluded and independence assumed. α = ${formatValue(session.nonparametric.result.alpha)}.`}
+                  </p>
+                </section>
+              )}
+              {session.resampling && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Resamplingresultat' : 'Resampling result'}
+                >
+                  <h4>
+                    {session.resampling.kind === 'bootstrap'
+                      ? language === 'sv'
+                        ? `Bootstrap · ${
+                            session.resampling.result.statistic === 'mean'
+                              ? 'medelvärde'
+                              : session.resampling.result.statistic === 'median'
+                                ? 'median'
+                                : session.resampling.result.statistic === 'standardDeviation'
+                                  ? 'standardavvikelse'
+                                  : 'varians'
+                          }`
+                        : `Bootstrap · ${
+                            session.resampling.result.statistic === 'standardDeviation'
+                              ? 'standard deviation'
+                              : session.resampling.result.statistic
+                          }`
+                      : language === 'sv'
+                        ? `Permutationstest · ${session.resampling.result.statistic === 'mean' ? 'medelskillnad' : 'medianskillnad'}`
+                        : `Permutation test · ${session.resampling.result.statistic} difference`}
+                  </h4>
+                  {session.resampling.kind === 'bootstrap' ? (
+                    <div className="stat-grid t-test-grid">
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Kompletta värden' : 'Complete values'}</span>
+                        <strong>{session.resampling.result.count}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Skattning' : 'Estimate'}</span>
+                        <strong>{formatValue(session.resampling.result.estimate)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Percentil-KI' : 'Percentile CI'}</span>
+                        <strong>
+                          {formatValue(session.resampling.result.confidenceInterval[0])} to{' '}
+                          {formatValue(session.resampling.result.confidenceInterval[1])}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Resamplings' : 'Resamples'}</span>
+                        <strong>{session.resampling.result.resamples}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>Seed</span>
+                        <strong>{session.resampling.result.seed}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>α</span>
+                        <strong>{formatValue(session.resampling.result.alpha)}</strong>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="stat-grid t-test-grid">
+                      <div className="stat-cell">
+                        <span>
+                          Δ{' '}
+                          {session.resampling.result.statistic === 'mean'
+                            ? language === 'sv'
+                              ? 'medel'
+                              : 'mean'
+                            : language === 'sv'
+                              ? 'median'
+                              : 'median'}
+                        </span>
+                        <strong>{formatValue(session.resampling.result.observedDifference)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>p-värde</span>
+                        <strong>{formatPValue(session.resampling.result.pValue, language)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>n₁ / n₂</span>
+                        <strong>
+                          {session.resampling.result.count1} / {session.resampling.result.count2}
+                        </strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Permutationer' : 'Permutations'}</span>
+                        <strong>{session.resampling.result.permutations}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>Seed</span>
+                        <strong>{session.resampling.result.seed}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>α</span>
+                        <strong>{formatValue(session.resampling.result.alpha)}</strong>
+                      </div>
+                    </div>
+                  )}
+                  <p className="session-caption">
+                    {session.resampling.kind === 'bootstrap'
+                      ? language === 'sv'
+                        ? 'Percentilintervall från empirisk bootstrapfördelning med återläggning. Monte Carlo-osäkerhet beror på antal resamplings och seed.'
+                        : 'Percentile interval from the empirical bootstrap distribution with replacement. Monte Carlo uncertainty depends on resample count and seed.'
+                      : language === 'sv'
+                        ? 'Tvåsidigt Monte Carlo-permutationstest under utbytbarhet mellan grupper; p-värdet använder plus-ett-korrigering.'
+                        : 'Two-sided Monte Carlo permutation test under exchangeability between groups; p-value uses the plus-one correction.'}
+                  </p>
+                </section>
+              )}
               {session.normalKS && (
                 <section
                   className="t-test-result"
@@ -2646,14 +4790,19 @@ function App() {
                 >
                   <h4>
                     {language === 'sv'
-                      ? 'Chi-två goodness-of-fit · lika andelar'
-                      : 'Chi-square goodness-of-fit · equal proportions'}
+                      ? session.chiSquareGoodnessOfFit.probabilitySource === 'equal'
+                        ? 'Chi-två goodness-of-fit · lika andelar'
+                        : 'Chi-två goodness-of-fit · angivna sannolikheter'
+                      : session.chiSquareGoodnessOfFit.probabilitySource === 'equal'
+                        ? 'Chi-square goodness-of-fit · equal proportions'
+                        : 'Chi-square goodness-of-fit · specified probabilities'}
                   </h4>
                   <div className="contingency-scroll">
                     <table className="contingency-table">
                       <thead>
                         <tr>
                           <th scope="col">{language === 'sv' ? 'Kategori' : 'Category'}</th>
+                          <th scope="col">{language === 'sv' ? 'Sannolikhet' : 'Probability'}</th>
                           <th scope="col">{language === 'sv' ? 'Observerad' : 'Observed'}</th>
                           <th scope="col">{language === 'sv' ? 'Förväntad' : 'Expected'}</th>
                         </tr>
@@ -2662,6 +4811,9 @@ function App() {
                         {session.chiSquareGoodnessOfFit.categories.map((category, index) => (
                           <tr key={category}>
                             <th scope="row">{category}</th>
+                            <td>
+                              {formatValue(session.chiSquareGoodnessOfFit!.probabilities[index])}
+                            </td>
                             <td>{session.chiSquareGoodnessOfFit!.observed[index]}</td>
                             <td
                               className={
@@ -2695,8 +4847,8 @@ function App() {
                   </div>
                   <p className="session-conclusion">
                     {language === 'sv'
-                      ? `${session.chiSquareGoodnessOfFit.pValue < session.chiSquareGoodnessOfFit.alpha ? 'Förkasta' : 'Förkasta inte'} H₀ om lika kategorisannolikheter (α = ${formatValue(session.chiSquareGoodnessOfFit.alpha)}).`
-                      : `${session.chiSquareGoodnessOfFit.pValue < session.chiSquareGoodnessOfFit.alpha ? 'Reject' : 'Do not reject'} H₀ of equal category probabilities (α = ${formatValue(session.chiSquareGoodnessOfFit.alpha)}).`}
+                      ? `${session.chiSquareGoodnessOfFit.pValue < session.chiSquareGoodnessOfFit.alpha ? 'Förkasta' : 'Förkasta inte'} H₀ om ${session.chiSquareGoodnessOfFit.probabilitySource === 'equal' ? 'lika kategorisannolikheter' : 'angivna kategorisannolikheter'} (α = ${formatValue(session.chiSquareGoodnessOfFit.alpha)}).`
+                      : `${session.chiSquareGoodnessOfFit.pValue < session.chiSquareGoodnessOfFit.alpha ? 'Reject' : 'Do not reject'} H₀ of ${session.chiSquareGoodnessOfFit.probabilitySource === 'equal' ? 'equal category probabilities' : 'specified category probabilities'} (α = ${formatValue(session.chiSquareGoodnessOfFit.alpha)}).`}
                   </p>
                   <p className="session-caption">
                     {session.chiSquareGoodnessOfFit.cellsBelowFive > 0
@@ -3004,6 +5156,578 @@ function App() {
                     {language === 'sv'
                       ? 'Individgränser: medelvärde ± 3 × MR̄/1,128. MR-gräns: 3,267 × MR̄. Åtta-på-en-sida är en Western Electric/Nelson-liknande regel; inga andra regler har kontrollerats.'
                       : 'Individuals limits: mean ± 3 × MR̄/1.128. MR limit: 3.267 × MR̄. Eight-on-one-side is a Western Electric/Nelson-style rule; other rules were not checked.'}
+                  </p>
+                </section>
+              )}
+              {session.timeSeries && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Tidsserieanalysresultat' : 'Time-series analysis result'
+                  }
+                >
+                  <h4>{session.title}</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.timeSeries.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Saknade' : 'Omitted'}</span>
+                      <strong>{session.timeSeries.omittedCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Medel' : 'Mean'}</span>
+                      <strong>{formatValue(session.timeSeries.mean)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>s</span>
+                      <strong>{formatValue(session.timeSeries.standardDeviation)}</strong>
+                    </div>
+                    {session.timeSeries.rSquared !== null && (
+                      <div className="stat-cell">
+                        <span>R²</span>
+                        <strong>{formatValue(session.timeSeries.rSquared)}</strong>
+                      </div>
+                    )}
+                    {session.timeSeries.rootMeanSquareError !== null && (
+                      <div className="stat-cell">
+                        <span>RMSE</span>
+                        <strong>{formatValue(session.timeSeries.rootMeanSquareError)}</strong>
+                      </div>
+                    )}
+                  </div>
+                  {session.timeSeries.trendCoefficients && (
+                    <div className="contingency-scroll">
+                      <table className="contingency-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">{language === 'sv' ? 'Trendterm' : 'Trend term'}</th>
+                            <th scope="col">{language === 'sv' ? 'Skattning' : 'Estimate'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <th scope="row">{language === 'sv' ? 'Intercept' : 'Intercept'}</th>
+                            <td>{formatValue(session.timeSeries.trendCoefficients.intercept)}</td>
+                          </tr>
+                          <tr>
+                            <th scope="row">{language === 'sv' ? 'Lutning' : 'Slope'}</th>
+                            <td>{formatValue(session.timeSeries.trendCoefficients.slope)}</td>
+                          </tr>
+                          {session.timeSeries.trendCoefficients.quadratic !== null && (
+                            <tr>
+                              <th scope="row">
+                                {language === 'sv' ? 'Kvadratisk term' : 'Quadratic term'}
+                              </th>
+                              <td>{formatValue(session.timeSeries.trendCoefficients.quadratic)}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {session.timeSeries.forecasts.length > 0 && (
+                    <>
+                      <h4>{language === 'sv' ? 'Prognoser' : 'Forecasts'}</h4>
+                      <div className="contingency-scroll">
+                        <table className="contingency-table">
+                          <thead>
+                            <tr>
+                              <th scope="col">
+                                {language === 'sv' ? 'Observation' : 'Observation'}
+                              </th>
+                              <th scope="col">{language === 'sv' ? 'Prognos' : 'Forecast'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {session.timeSeries.forecasts.map((forecast) => (
+                              <tr key={forecast.observation}>
+                                <th scope="row">{forecast.observation}</th>
+                                <td>{formatValue(forecast.value)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  {session.timeSeries.lagCorrelations.length > 0 && (
+                    <div className="contingency-scroll">
+                      <table className="contingency-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">{language === 'sv' ? 'Lagg' : 'Lag'}</th>
+                            <th scope="col">ACF</th>
+                            <th scope="col">PACF</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {session.timeSeries.lagCorrelations.map((lag) => (
+                            <tr key={lag.lag}>
+                              <th scope="row">{lag.lag}</th>
+                              <td>{formatValue(lag.acf)}</td>
+                              <td>{lag.pacf === null ? '' : formatValue(lag.pacf)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <GraphPlot
+                    graph={{
+                      stableKey: session.timeSeries,
+                      kind: session.timeSeries.method === 'acf' ? 'autocorrelation' : 'timeSeries',
+                      title:
+                        session.timeSeries.method === 'acf'
+                          ? language === 'sv'
+                            ? 'ACF / PACF'
+                            : 'ACF / PACF'
+                          : session.title,
+                      xTitle:
+                        session.timeSeries.method === 'acf'
+                          ? language === 'sv'
+                            ? 'Lagg'
+                            : 'Lag'
+                          : language === 'sv'
+                            ? 'Observation'
+                            : 'Observation',
+                      yTitle:
+                        session.timeSeries.method === 'acf'
+                          ? 'Correlation'
+                          : language === 'sv'
+                            ? 'Mätvärde'
+                            : 'Value',
+                      sampleCount: session.timeSeries.count,
+                      cumulativeAxis: false,
+                      data:
+                        session.timeSeries.method === 'acf'
+                          ? [
+                              {
+                                type: 'scatter',
+                                mode: 'lines+markers',
+                                name: 'ACF',
+                                x: session.timeSeries.lagCorrelations.map((lag) => lag.lag),
+                                y: session.timeSeries.lagCorrelations.map((lag) => lag.acf),
+                              },
+                              {
+                                type: 'scatter',
+                                mode: 'lines+markers',
+                                name: 'PACF',
+                                x: session.timeSeries.lagCorrelations.flatMap((lag) =>
+                                  lag.pacf === null ? [] : [lag.lag],
+                                ),
+                                y: session.timeSeries.lagCorrelations.flatMap((lag) =>
+                                  lag.pacf === null ? [] : [lag.pacf],
+                                ),
+                              },
+                            ]
+                          : [
+                              {
+                                type: 'scatter',
+                                mode: 'lines+markers',
+                                name: language === 'sv' ? 'Observerat' : 'Observed',
+                                x: session.timeSeries.points.map((point) => point.observation),
+                                y: session.timeSeries.points.map((point) => point.value),
+                              },
+                              {
+                                type: 'scatter',
+                                mode: 'lines',
+                                name: language === 'sv' ? 'Anpassat' : 'Fitted',
+                                x: session.timeSeries.points.flatMap((point) =>
+                                  point.fitted === null ? [] : [point.observation],
+                                ),
+                                y: session.timeSeries.points.flatMap((point) =>
+                                  point.fitted === null ? [] : [point.fitted],
+                                ),
+                              },
+                              {
+                                type: 'scatter',
+                                mode: 'lines+markers',
+                                lineDash: 'dash',
+                                name: language === 'sv' ? 'Prognos' : 'Forecast',
+                                x: session.timeSeries.forecasts.map((point) => point.observation),
+                                y: session.timeSeries.forecasts.map((point) => point.value),
+                              },
+                            ],
+                    }}
+                    language={language}
+                    theme={theme}
+                  />
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Tidsseriemodellerna är ej oberoende referensverifierade; prognosintervall, säsongsmodeller och periodiska komponenter återstår.'
+                      : 'Time-series models are not independently reference-verified; prediction intervals, seasonal models, and periodic components remain outstanding.'}
+                  </p>
+                </section>
+              )}
+              {session.power && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Powerresultat' : 'Power result'}
+                >
+                  <h4>
+                    {language === 'sv' ? 'Power och stickprovsstorlek' : 'Power and sample size'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Test' : 'Test'}</span>
+                      <strong>{powerTestLabel(session.power.test, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {powerUsesTwoGroups(session.power.test)
+                          ? language === 'sv'
+                            ? 'n / grupp'
+                            : 'n / group'
+                          : 'n'}
+                      </span>
+                      <strong>{session.power.sampleSizePerGroup}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Totalt N' : 'Total N'}</span>
+                      <strong>{session.power.totalSampleSize}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Uppnådd power' : 'Achieved power'}</span>
+                      <strong>{formatValue(session.power.achievedPower * 100)}%</strong>
+                    </div>
+                    {session.power.targetPower !== null && (
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Mål-power' : 'Target power'}</span>
+                        <strong>{formatValue(session.power.targetPower * 100)}%</strong>
+                      </div>
+                    )}
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.power.alpha)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Effekt' : 'Effect'}</span>
+                      <strong>{formatValue(session.power.effect)}</strong>
+                    </div>
+                  </div>
+                  <GraphPlot
+                    graph={{
+                      stableKey: session.power,
+                      kind: 'powerCurve',
+                      title: language === 'sv' ? 'Powerkurva' : 'Power curve',
+                      xTitle:
+                        language === 'sv' ? 'Stickprovsstorlek per grupp' : 'Sample size per group',
+                      yTitle: 'Power',
+                      sampleCount: session.power.curve.length,
+                      cumulativeAxis: false,
+                      data: [
+                        {
+                          type: 'scatter',
+                          mode: 'lines',
+                          name: language === 'sv' ? 'Uppnådd power' : 'Achieved power',
+                          x: session.power.curve.map((point) => point.sampleSize),
+                          y: session.power.curve.map((point) => point.power),
+                        },
+                      ],
+                    }}
+                    language={language}
+                    theme={theme}
+                  />
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Tvåsidig normalapproximation. Tvågruppsberäkningar antar lika stora grupper; t-testens icke-centrala t-fördelning och ANOVA-power återstår. Resultatet är inte oberoende referensverifierat.'
+                      : 'Two-sided normal approximation. Two-group calculations assume equal group sizes; noncentral-t power and ANOVA power remain outstanding. Results are not independently reference-verified.'}
+                  </p>
+                </section>
+              )}
+              {session.survival && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Överlevnadsresultat' : 'Survival result'}
+                >
+                  <div className="regression-diagnostics-heading">
+                    <h4>{language === 'sv' ? 'Kaplan–Meier-analys' : 'Kaplan-Meier analysis'}</h4>
+                    <button
+                      className="toolbar-button"
+                      type="button"
+                      onClick={exportSurvivalEstimates}
+                    >
+                      <Download size={14} />
+                      {language === 'sv' ? 'Exportera alla' : 'Export all'}
+                    </button>
+                  </div>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Kompletta rader' : 'Complete rows'}</span>
+                      <strong>{session.survival.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Händelser' : 'Events'}</span>
+                      <strong>{session.survival.eventCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Censurerade' : 'Censored'}</span>
+                      <strong>{session.survival.censoredCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Uteslutna rader' : 'Rows excluded'}</span>
+                      <strong>{session.survival.droppedCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Grupper' : 'Groups'}</span>
+                      <strong>{session.survival.curves.length}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>α</span>
+                      <strong>{formatValue(session.survival.alpha)}</strong>
+                    </div>
+                  </div>
+                  <div className="contingency-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Grupp' : 'Group'}</th>
+                          <th scope="col">n</th>
+                          <th scope="col">{language === 'sv' ? 'Händelser' : 'Events'}</th>
+                          <th scope="col">{language === 'sv' ? 'Censurerade' : 'Censored'}</th>
+                          <th scope="col">{language === 'sv' ? 'Median' : 'Median'}</th>
+                          <th scope="col">{language === 'sv' ? 'Median-KI' : 'Median CI'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.survival.curves.map((curve) => (
+                          <tr key={curve.group}>
+                            <th scope="row">{curve.group}</th>
+                            <td>{curve.count}</td>
+                            <td>{curve.eventCount}</td>
+                            <td>{curve.censoredCount}</td>
+                            <td>
+                              {curve.median === null
+                                ? language === 'sv'
+                                  ? 'Ej uppnådd'
+                                  : 'Not reached'
+                                : formatValue(curve.median)}
+                            </td>
+                            <td>
+                              {curve.medianConfidenceInterval[0] === null
+                                ? '–'
+                                : formatValue(curve.medianConfidenceInterval[0])}
+                              {language === 'sv' ? ' till ' : ' to '}
+                              {curve.medianConfidenceInterval[1] === null
+                                ? '–'
+                                : formatValue(curve.medianConfidenceInterval[1])}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <h4>
+                    {language === 'sv'
+                      ? 'Riskmängd och överlevnadsskattningar'
+                      : 'At-risk counts and survival estimates'}
+                  </h4>
+                  <div className="contingency-scroll survival-risk-scroll">
+                    <table className="contingency-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{language === 'sv' ? 'Grupp' : 'Group'}</th>
+                          <th scope="col">{language === 'sv' ? 'Tid' : 'Time'}</th>
+                          <th scope="col">{language === 'sv' ? 'I risk' : 'At risk'}</th>
+                          <th scope="col">{language === 'sv' ? 'Händelser' : 'Events'}</th>
+                          <th scope="col">{language === 'sv' ? 'Censurerade' : 'Censored'}</th>
+                          <th scope="col">S(t)</th>
+                          <th scope="col">{language === 'sv' ? 'KI nedre' : 'CI lower'}</th>
+                          <th scope="col">{language === 'sv' ? 'KI övre' : 'CI upper'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.survival.curves
+                          .flatMap((curve) => curve.points.map((point) => ({ curve, point })))
+                          .slice(0, 100)
+                          .map(({ curve, point }, index) => (
+                            <tr key={`${curve.group}-${index}`}>
+                              <th scope="row">{curve.group}</th>
+                              <td>{formatValue(point.time)}</td>
+                              <td>{point.atRisk}</td>
+                              <td>{point.events}</td>
+                              <td>{point.censored}</td>
+                              <td>{formatValue(point.survival)}</td>
+                              <td>{formatValue(point.lowerConfidenceLimit)}</td>
+                              <td>{formatValue(point.upperConfidenceLimit)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {session.parametricSurvival && (
+                    <>
+                      <h4>
+                        {language === 'sv'
+                          ? 'Parametriska livslängdsmodeller'
+                          : 'Parametric lifetime models'}
+                      </h4>
+                      {session.parametricSurvival.groups.map((group) => {
+                        const bestAic =
+                          group.fits.length > 0
+                            ? Math.min(...group.fits.map((fit) => fit.aic))
+                            : null
+                        return (
+                          <div key={group.group}>
+                            <h5>{group.group}</h5>
+                            {group.fits.length > 0 ? (
+                              <div className="contingency-scroll">
+                                <table className="contingency-table">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">
+                                        {language === 'sv' ? 'Fördelning' : 'Distribution'}
+                                      </th>
+                                      <th scope="col">{language === 'sv' ? 'Form' : 'Shape'}</th>
+                                      <th scope="col">{language === 'sv' ? 'Skala' : 'Scale'}</th>
+                                      <th scope="col">{language === 'sv' ? 'Median' : 'Median'}</th>
+                                      <th scope="col">
+                                        {language === 'sv' ? 'Log-likelihood' : 'Log-likelihood'}
+                                      </th>
+                                      <th scope="col">AIC</th>
+                                      <th scope="col">BIC</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {group.fits.map((fit) => (
+                                      <tr key={fit.distribution}>
+                                        <th scope="row">
+                                          {fit.distribution === 'weibull'
+                                            ? 'Weibull'
+                                            : 'Exponential'}
+                                          {fit.aic === bestAic && (
+                                            <small>
+                                              {language === 'sv' ? ' · lägst AIC' : ' · best AIC'}
+                                            </small>
+                                          )}
+                                        </th>
+                                        <td>{fit.shape === null ? '—' : formatValue(fit.shape)}</td>
+                                        <td>{formatValue(fit.scale)}</td>
+                                        <td>{formatValue(fit.median)}</td>
+                                        <td>{formatValue(fit.logLikelihood)}</td>
+                                        <td>{formatValue(fit.aic)}</td>
+                                        <td>{formatValue(fit.bic)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="session-caption">{group.unavailableReason}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
+                  {session.survival.logRank && (
+                    <div className="stat-grid t-test-grid">
+                      <div className="stat-cell">
+                        <span>χ² (1)</span>
+                        <strong>{formatValue(session.survival.logRank.chiSquare)}</strong>
+                      </div>
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Log-rank p' : 'Log-rank p'}</span>
+                        <strong>{formatPValue(session.survival.logRank.pValue, language)}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {session.survival.curves.length === 2 && !session.survival.logRank && (
+                    <p className="session-caption">
+                      {language === 'sv'
+                        ? 'Log-rank kunde inte skattas eftersom det saknades informativ variation i riskmängderna.'
+                        : 'The log-rank test was not estimable because the risk sets had no informative variation.'}
+                    </p>
+                  )}
+                  <GraphPlot
+                    graph={{
+                      stableKey: session.survival,
+                      kind: 'survival',
+                      title:
+                        language === 'sv' ? 'Kaplan–Meier-överlevnad' : 'Kaplan-Meier survival',
+                      xTitle: language === 'sv' ? 'Tid' : 'Time',
+                      yTitle: language === 'sv' ? 'Överlevnadssannolikhet' : 'Survival probability',
+                      sampleCount: session.survival.count,
+                      cumulativeAxis: false,
+                      data: [
+                        ...session.survival.curves.flatMap((curve, curveIndex) => {
+                          const color = curveIndex === 0 ? '#2f7861' : '#e16d4c'
+                          const censoredPoints = curve.points.filter((point) => point.censored > 0)
+                          const time = curve.points.map((point) => point.time)
+                          return [
+                            {
+                              type: 'scatter' as const,
+                              mode: 'lines' as const,
+                              lineShape: 'hv' as const,
+                              name: `${curve.group} upper CI`,
+                              x: time,
+                              y: curve.points.map((point) => point.upperConfidenceLimit),
+                              color,
+                              showLegend: false,
+                            },
+                            {
+                              type: 'scatter' as const,
+                              mode: 'lines' as const,
+                              lineShape: 'hv' as const,
+                              name: `${curve.group} confidence interval`,
+                              x: time,
+                              y: curve.points.map((point) => point.lowerConfidenceLimit),
+                              color,
+                              fill: 'tonexty' as const,
+                              fillColor:
+                                curveIndex === 0
+                                  ? 'rgba(47, 120, 97, 0.16)'
+                                  : 'rgba(225, 109, 76, 0.16)',
+                              showLegend: false,
+                            },
+                            {
+                              type: 'scatter' as const,
+                              mode: 'lines' as const,
+                              lineShape: 'hv' as const,
+                              name: curve.group,
+                              x: time,
+                              y: curve.points.map((point) => point.survival),
+                              color,
+                            },
+                            {
+                              type: 'scatter' as const,
+                              mode: 'markers' as const,
+                              name:
+                                language === 'sv'
+                                  ? `Censurerad · ${curve.group}`
+                                  : `Censored · ${curve.group}`,
+                              x: censoredPoints.map((point) => point.time),
+                              y: censoredPoints.map((point) => point.survival),
+                              color,
+                              showLegend: false,
+                            },
+                          ]
+                        }),
+                        ...(session.parametricSurvival?.curves ?? []).map((curve) => {
+                          const groupIndex = session.survival!.curves.findIndex(
+                            (survivalCurve) => survivalCurve.group === curve.group,
+                          )
+                          return {
+                            type: 'scatter' as const,
+                            mode: 'lines' as const,
+                            lineDash: 'dash' as const,
+                            name: `${curve.group} ${curve.distribution === 'weibull' ? 'Weibull' : 'Exponential'}`,
+                            x: curve.times,
+                            y: curve.survival,
+                            color: groupIndex === 0 ? '#2f7861' : '#e16d4c',
+                          }
+                        }),
+                      ],
+                    }}
+                    language={language}
+                    theme={theme}
+                  />
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Produkt-limit-skattning med Greenwood log–log-konfidensband. Log-rank jämför högst två grupper. Oberoende referensverifiering återstår.'
+                      : 'Product-limit estimate with Greenwood log-log confidence bands. Log-rank compares at most two groups. Independent reference validation remains outstanding.'}
                   </p>
                 </section>
               )}
@@ -3317,250 +6041,553 @@ function App() {
           event.target.value = ''
         }}
       />
-      <OneSampleTDialog
-        open={oneSampleTDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setOneSampleTDialogOpen}
-        onSubmit={(columnId, hypothesizedMean, alpha) => {
-          void runOneSampleTAnalysis(columnId, hypothesizedMean, alpha)
+      <Dialog.Root open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-overlay command-palette-overlay" />
+          <Dialog.Content
+            className="command-palette"
+            aria-describedby="command-palette-description"
+          >
+            <Dialog.Title className="sr-only">
+              {language === 'sv' ? 'Sök kommando' : 'Search commands'}
+            </Dialog.Title>
+            <Dialog.Description id="command-palette-description" className="sr-only">
+              {language === 'sv'
+                ? 'Sök bland analyser, verktyg och arbetsboksåtgärder.'
+                : 'Search analyses, tools, and worksheet actions.'}
+            </Dialog.Description>
+            <label className="command-palette-search">
+              <Search size={18} aria-hidden="true" />
+              <input
+                autoFocus
+                type="search"
+                value={commandQuery}
+                onChange={(event) => setCommandQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    setCommandIndex((index) => Math.min(index + 1, filteredCommands.length - 1))
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    setCommandIndex((index) => Math.max(index - 1, 0))
+                  } else if (event.key === 'Enter') {
+                    const command = filteredCommands[commandIndex]
+                    if (command && !command.disabled) {
+                      event.preventDefault()
+                      runCommand(command.action)
+                    }
+                  }
+                }}
+                placeholder={
+                  language === 'sv'
+                    ? 'Sök analys, verktyg eller åtgärd…'
+                    : 'Search analyses, tools, or actions…'
+                }
+                aria-label={language === 'sv' ? 'Sök kommandon' : 'Search commands'}
+              />
+              <kbd>ESC</kbd>
+            </label>
+            <div
+              className="command-palette-results"
+              role="listbox"
+              aria-label={language === 'sv' ? 'Kommandon' : 'Commands'}
+            >
+              {filteredCommands.map((command, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === commandIndex}
+                  key={`${command.group}:${command.action}`}
+                  disabled={command.disabled}
+                  onMouseEnter={() => setCommandIndex(index)}
+                  onClick={() => runCommand(command.action)}
+                >
+                  <span>{command.label}</span>
+                  <small>{command.group}</small>
+                </button>
+              ))}
+              {filteredCommands.length === 0 && (
+                <p className="command-palette-empty">
+                  {language === 'sv'
+                    ? 'Inga kommandon matchar sökningen.'
+                    : 'No commands match your search.'}
+                </p>
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <Fragment key={analysisDialogKey}>
+        <OneSampleTDialog
+          open={oneSampleTDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setOneSampleTDialogOpen}
+          onSubmit={(columnId, hypothesizedMean, alpha) => {
+            void runOneSampleTAnalysis(columnId, hypothesizedMean, alpha)
+          }}
+        />
+        <OneSampleZDialog
+          open={oneSampleZDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setOneSampleZDialogOpen}
+          onSubmit={(columnId, mean, standardDeviation, alpha) => {
+            void runOneSampleZAnalysis(columnId, mean, standardDeviation, alpha)
+          }}
+        />
+        <TwoSampleZDialog
+          open={twoSampleZDialogOpen}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setTwoSampleZDialogOpen}
+          onSubmit={(columnId1, columnId2, sigma1, sigma2, difference, alpha) => {
+            void runTwoSampleZAnalysis(columnId1, columnId2, sigma1, sigma2, difference, alpha)
+          }}
+        />
+        <TwoSampleTDialog
+          open={twoSampleTDialogOpen}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setTwoSampleTDialogOpen}
+          onSubmit={(columnId1, columnId2, difference, alpha) => {
+            void runTwoSampleTAnalysis(columnId1, columnId2, difference, alpha)
+          }}
+        />
+        <PairedTDialog
+          open={pairedTDialogOpen}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setPairedTDialogOpen}
+          onSubmit={(columnId1, columnId2, difference, alpha) => {
+            void runPairedTAnalysis(columnId1, columnId2, difference, alpha)
+          }}
+        />
+        <OneProportionDialog
+          open={oneProportionDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setOneProportionDialogOpen}
+          onSubmit={(columnId, hypothesizedProportion, alpha) => {
+            void runOneProportionAnalysis(columnId, hypothesizedProportion, alpha)
+          }}
+        />
+        <TwoProportionsDialog
+          open={twoProportionsDialogOpen}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setTwoProportionsDialogOpen}
+          onSubmit={(columnId1, columnId2, alpha) => {
+            void runTwoProportionsAnalysis(columnId1, columnId2, alpha)
+          }}
+        />
+        <CorrelationDialog
+          open={correlationDialogOpen}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setCorrelationDialogOpen}
+          onSubmit={(columnId1, columnId2, alpha) => {
+            void runCorrelationAnalysis(columnId1, columnId2, alpha)
+          }}
+        />
+        <NormalKSDialog
+          open={normalKSDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setNormalKSDialogOpen}
+          onSubmit={(columnId, mean, standardDeviation) => {
+            void runNormalKSAnalysis(columnId, mean, standardDeviation)
+          }}
+        />
+        <AndersonDarlingDialog
+          open={normalADDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setNormalADDialogOpen}
+          onSubmit={(columnId, alpha) => {
+            void runNormalADAnalysis(columnId, alpha)
+          }}
+        />
+        <PoissonGoodnessOfFitDialog
+          open={poissonGoodnessOfFitDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setPoissonGoodnessOfFitDialogOpen}
+          onSubmit={(columnId, alpha, specifiedRate) => {
+            void runPoissonGoodnessOfFitAnalysis(columnId, alpha, specifiedRate)
+          }}
+        />
+        <ChiSquareDialog
+          open={chiSquareDialogOpen}
+          initialColumn1={columns[0]?.id ?? ''}
+          initialColumn2={columns[1]?.id ?? columns[0]?.id ?? ''}
+          columns={columns}
+          language={language}
+          onOpenChange={setChiSquareDialogOpen}
+          onSubmit={(columnId1, columnId2, alpha) => {
+            void runChiSquareAnalysis(columnId1, columnId2, alpha)
+          }}
+        />
+        <FisherExactDialog
+          open={fisherExactDialogOpen}
+          initialColumn1={columns[0]?.id ?? ''}
+          initialColumn2={columns[1]?.id ?? columns[0]?.id ?? ''}
+          columns={columns}
+          language={language}
+          onOpenChange={setFisherExactDialogOpen}
+          onSubmit={(columnId1, columnId2) => {
+            void runFisherExact(columnId1, columnId2)
+          }}
+        />
+        <ProcessCapabilityDialog
+          open={processCapabilityDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setProcessCapabilityDialogOpen}
+          onSubmit={(columnId, lowerSpecLimit, upperSpecLimit, target) => {
+            void runProcessCapability(columnId, lowerSpecLimit, upperSpecLimit, target)
+          }}
+        />
+        <ImrControlChartDialog
+          open={imrControlChartDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setImrControlChartDialogOpen}
+          onSubmit={(columnId) => {
+            void runImrControlChartAnalysis(columnId)
+          }}
+        />
+        <GraphDialog
+          open={graphDialogOpen}
+          initialColumn={targetColumn}
+          numericColumns={numericColumns}
+          categoryColumns={categoryColumns}
+          language={language}
+          onOpenChange={setGraphDialogOpen}
+          onSubmit={(selection) => {
+            void runGraphAnalysis(selection)
+          }}
+        />
+        <QualityStudioDialog
+          open={qualityStudioOpen}
+          language={language}
+          onOpenChange={setQualityStudioOpen}
+        />
+        <GageRrDialog
+          open={gageRrDialogOpen}
+          initialPartColumn={categoryColumns[0]?.id ?? ''}
+          initialOperatorColumn={categoryColumns[1]?.id ?? categoryColumns[0]?.id ?? ''}
+          numericColumns={numericColumns}
+          categoryColumns={categoryColumns}
+          language={language}
+          onOpenChange={setGageRrDialogOpen}
+          onSubmit={(partColumnId, operatorColumnId, measurementColumnId, tolerance) => {
+            void runGageRrAnalysis(partColumnId, operatorColumnId, measurementColumnId, tolerance)
+          }}
+        />
+        <SubgroupControlChartDialog
+          open={subgroupControlChartDialogOpen}
+          initialGroupColumn={categoryColumns[0]?.id ?? ''}
+          initialMeasurementColumn={numericColumns[0]?.id ?? ''}
+          categoryColumns={categoryColumns}
+          numericColumns={numericColumns}
+          language={language}
+          onOpenChange={setSubgroupControlChartDialogOpen}
+          onSubmit={(kind, groupColumnId, measurementColumnId) => {
+            void runSubgroupControlChartAnalysis(kind, groupColumnId, measurementColumnId)
+          }}
+        />
+        <ChiSquareGoodnessOfFitDialog
+          open={chiSquareGoodnessOfFitDialogOpen}
+          initialColumn={categoryColumns[0]?.id ?? columns[0]?.id ?? ''}
+          columns={columns}
+          rows={rows}
+          language={language}
+          onOpenChange={setChiSquareGoodnessOfFitDialogOpen}
+          onSubmit={(columnId, alpha, probabilities) => {
+            void runChiSquareGoodnessOfFit(columnId, alpha, probabilities)
+          }}
+        />
+        <CompareVariancesDialog
+          open={varianceDialogOpen}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setVarianceDialogOpen}
+          onSubmit={(columnId1, columnId2, alpha) => {
+            void runVarianceComparison(columnId1, columnId2, alpha)
+          }}
+        />
+        <OneWayAnovaDialog
+          open={oneWayAnovaDialogOpen}
+          initialMeasurementColumn={numericColumns[0]?.id ?? ''}
+          initialGroupColumn={
+            categoryColumns[0]?.id ?? columns.find((column) => column.type !== 'numeric')?.id ?? ''
+          }
+          numericColumns={numericColumns}
+          categoryColumns={columns.filter((column) => column.type !== 'numeric')}
+          language={language}
+          onOpenChange={setOneWayAnovaDialogOpen}
+          onSubmit={(measurementColumnId, groupColumnId, alpha) => {
+            void runOneWayAnova(measurementColumnId, groupColumnId, alpha)
+          }}
+        />
+        <TwoWayAnovaDialog
+          open={twoWayAnovaDialogOpen}
+          numericColumns={numericColumns}
+          factorColumns={categoryColumns}
+          initialResponseColumn={numericColumns[0]?.id ?? ''}
+          initialFactor1Column={categoryColumns[0]?.id ?? ''}
+          initialFactor2Column={categoryColumns[1]?.id ?? categoryColumns[0]?.id ?? ''}
+          language={language}
+          onOpenChange={setTwoWayAnovaDialogOpen}
+          onSubmit={(responseColumnId, factor1ColumnId, factor2ColumnId, alpha) => {
+            void runTwoWayAnova(responseColumnId, factor1ColumnId, factor2ColumnId, alpha)
+          }}
+        />
+        <LinearRegressionDialog
+          open={linearRegressionDialogOpen}
+          numericColumns={numericColumns}
+          categoricalColumns={columns.filter((column) => column.type === 'text')}
+          initialResponseColumn={numericColumns[0]?.id ?? ''}
+          initialPredictorIds={numericColumns.slice(1, 4).map((column) => column.id)}
+          language={language}
+          onOpenChange={setLinearRegressionDialogOpen}
+          onSubmit={(responseColumnId, predictorColumnIds, alpha, modelOptions) => {
+            void runLinearRegression(responseColumnId, predictorColumnIds, alpha, modelOptions)
+          }}
+        />
+        <SurvivalDialog
+          open={survivalDialogOpen}
+          numericColumns={numericColumns}
+          categoryColumns={columns.filter((column) => column.type === 'text')}
+          initialTimeColumn={numericColumns[0]?.id ?? ''}
+          initialStatusColumn={numericColumns[1]?.id ?? ''}
+          initialGroupColumn={columns.find((column) => column.type === 'text')?.id ?? ''}
+          language={language}
+          onOpenChange={setSurvivalDialogOpen}
+          onSubmit={(timeColumnId, statusColumnId, groupColumnId, alpha) => {
+            void runSurvivalAnalysis(timeColumnId, statusColumnId, groupColumnId, alpha)
+          }}
+        />
+        <TimeSeriesDialog
+          open={timeSeriesDialogOpen}
+          columns={numericColumns}
+          initialColumn={numericColumns[0]?.id ?? ''}
+          language={language}
+          onOpenChange={setTimeSeriesDialogOpen}
+          onSubmit={(columnId, options) => void runTimeSeriesAnalysis(columnId, options)}
+        />
+        <PowerDialog
+          open={powerDialogOpen}
+          language={language}
+          onOpenChange={setPowerDialogOpen}
+          onSubmit={(request) => void runPowerAnalysis(request)}
+        />
+        <FlowchartEditor
+          open={flowchartEditorOpen}
+          language={language}
+          onOpenChange={setFlowchartEditorOpen}
+        />
+        <TwoLevelFactorialDialog
+          open={twoLevelFactorialDialogOpen}
+          columns={columns}
+          language={language}
+          onOpenChange={setTwoLevelFactorialDialogOpen}
+          onSubmit={(request) => void runTwoLevelFactorial(request)}
+        />
+        <NonparametricDialog
+          open={nonparametricDialogOpen}
+          numericColumns={numericColumns}
+          groupColumns={categoryColumns}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          initialGroupColumn={categoryColumns[0]?.id ?? ''}
+          language={language}
+          onOpenChange={setNonparametricDialogOpen}
+          onSubmit={(request) => void runNonparametricAnalysis(request)}
+        />
+        <ResamplingDialog
+          open={resamplingDialogOpen}
+          columns={numericColumns}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          language={language}
+          onOpenChange={setResamplingDialogOpen}
+          onSubmit={(request) => void runResamplingAnalysis(request)}
+        />
+        <OneSamplePoissonRateDialog
+          open={oneSamplePoissonDialogOpen}
+          initialColumn={targetColumn}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setOneSamplePoissonDialogOpen}
+          onSubmit={(columnId, exposurePerObservation, hypothesizedRate, alpha) => {
+            void runOneSamplePoissonAnalysis(
+              columnId,
+              exposurePerObservation,
+              hypothesizedRate,
+              alpha,
+            )
+          }}
+        />
+        <TwoSamplePoissonRateDialog
+          open={twoSamplePoissonDialogOpen}
+          initialColumn1={numericColumns[0]?.id ?? ''}
+          initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
+          columns={numericColumns}
+          language={language}
+          onOpenChange={setTwoSamplePoissonDialogOpen}
+          onSubmit={(columnId1, exposure1, columnId2, exposure2, alpha) => {
+            void runTwoSamplePoissonAnalysis(columnId1, exposure1, columnId2, exposure2, alpha)
+          }}
+        />
+        <DataOperationsDialog
+          open={dataOperationsDialogOpen}
+          columns={columns}
+          rows={rows}
+          worksheets={operationWorksheets}
+          initialColumn={targetColumn}
+          language={language}
+          onOpenChange={setDataOperationsDialogOpen}
+          onSubmit={applyDataOperation}
+        />
+        <ColumnFormulaDialog
+          open={columnFormulaDialogOpen}
+          columns={columns}
+          rows={rows}
+          language={language}
+          onOpenChange={setColumnFormulaDialogOpen}
+          onSubmit={addCalculatedColumn}
+        />
+      </Fragment>
+      <Dialog.Root
+        open={appDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setAppDialog(null)
         }}
-      />
-      <OneSampleZDialog
-        open={oneSampleZDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setOneSampleZDialogOpen}
-        onSubmit={(columnId, mean, standardDeviation, alpha) => {
-          void runOneSampleZAnalysis(columnId, mean, standardDeviation, alpha)
-        }}
-      />
-      <TwoSampleZDialog
-        open={twoSampleZDialogOpen}
-        initialColumn1={numericColumns[0]?.id ?? ''}
-        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setTwoSampleZDialogOpen}
-        onSubmit={(columnId1, columnId2, sigma1, sigma2, difference, alpha) => {
-          void runTwoSampleZAnalysis(columnId1, columnId2, sigma1, sigma2, difference, alpha)
-        }}
-      />
-      <TwoSampleTDialog
-        open={twoSampleTDialogOpen}
-        initialColumn1={numericColumns[0]?.id ?? ''}
-        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setTwoSampleTDialogOpen}
-        onSubmit={(columnId1, columnId2, difference, alpha) => {
-          void runTwoSampleTAnalysis(columnId1, columnId2, difference, alpha)
-        }}
-      />
-      <PairedTDialog
-        open={pairedTDialogOpen}
-        initialColumn1={numericColumns[0]?.id ?? ''}
-        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setPairedTDialogOpen}
-        onSubmit={(columnId1, columnId2, difference, alpha) => {
-          void runPairedTAnalysis(columnId1, columnId2, difference, alpha)
-        }}
-      />
-      <OneProportionDialog
-        open={oneProportionDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setOneProportionDialogOpen}
-        onSubmit={(columnId, hypothesizedProportion, alpha) => {
-          void runOneProportionAnalysis(columnId, hypothesizedProportion, alpha)
-        }}
-      />
-      <TwoProportionsDialog
-        open={twoProportionsDialogOpen}
-        initialColumn1={numericColumns[0]?.id ?? ''}
-        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setTwoProportionsDialogOpen}
-        onSubmit={(columnId1, columnId2, alpha) => {
-          void runTwoProportionsAnalysis(columnId1, columnId2, alpha)
-        }}
-      />
-      <CorrelationDialog
-        open={correlationDialogOpen}
-        initialColumn1={numericColumns[0]?.id ?? ''}
-        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setCorrelationDialogOpen}
-        onSubmit={(columnId1, columnId2, alpha) => {
-          void runCorrelationAnalysis(columnId1, columnId2, alpha)
-        }}
-      />
-      <NormalKSDialog
-        open={normalKSDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setNormalKSDialogOpen}
-        onSubmit={(columnId, mean, standardDeviation) => {
-          void runNormalKSAnalysis(columnId, mean, standardDeviation)
-        }}
-      />
-      <AndersonDarlingDialog
-        open={normalADDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setNormalADDialogOpen}
-        onSubmit={(columnId, alpha) => {
-          void runNormalADAnalysis(columnId, alpha)
-        }}
-      />
-      <PoissonGoodnessOfFitDialog
-        open={poissonGoodnessOfFitDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setPoissonGoodnessOfFitDialogOpen}
-        onSubmit={(columnId, alpha, specifiedRate) => {
-          void runPoissonGoodnessOfFitAnalysis(columnId, alpha, specifiedRate)
-        }}
-      />
-      <ChiSquareDialog
-        open={chiSquareDialogOpen}
-        initialColumn1={columns[0]?.id ?? ''}
-        initialColumn2={columns[1]?.id ?? columns[0]?.id ?? ''}
-        columns={columns}
-        language={language}
-        onOpenChange={setChiSquareDialogOpen}
-        onSubmit={(columnId1, columnId2, alpha) => {
-          void runChiSquareAnalysis(columnId1, columnId2, alpha)
-        }}
-      />
-      <FisherExactDialog
-        open={fisherExactDialogOpen}
-        initialColumn1={columns[0]?.id ?? ''}
-        initialColumn2={columns[1]?.id ?? columns[0]?.id ?? ''}
-        columns={columns}
-        language={language}
-        onOpenChange={setFisherExactDialogOpen}
-        onSubmit={(columnId1, columnId2) => {
-          void runFisherExact(columnId1, columnId2)
-        }}
-      />
-      <ProcessCapabilityDialog
-        open={processCapabilityDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setProcessCapabilityDialogOpen}
-        onSubmit={(columnId, lowerSpecLimit, upperSpecLimit, target) => {
-          void runProcessCapability(columnId, lowerSpecLimit, upperSpecLimit, target)
-        }}
-      />
-      <ImrControlChartDialog
-        open={imrControlChartDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setImrControlChartDialogOpen}
-        onSubmit={(columnId) => {
-          void runImrControlChartAnalysis(columnId)
-        }}
-      />
-      <GraphDialog
-        open={graphDialogOpen}
-        initialColumn={targetColumn}
-        numericColumns={numericColumns}
-        categoryColumns={categoryColumns}
-        language={language}
-        onOpenChange={setGraphDialogOpen}
-        onSubmit={(selection) => {
-          void runGraphAnalysis(selection)
-        }}
-      />
-      <QualityStudioDialog
-        open={qualityStudioOpen}
-        language={language}
-        onOpenChange={setQualityStudioOpen}
-      />
-      <GageRrDialog
-        open={gageRrDialogOpen}
-        initialPartColumn={categoryColumns[0]?.id ?? ''}
-        initialOperatorColumn={categoryColumns[1]?.id ?? categoryColumns[0]?.id ?? ''}
-        numericColumns={numericColumns}
-        categoryColumns={categoryColumns}
-        language={language}
-        onOpenChange={setGageRrDialogOpen}
-        onSubmit={(partColumnId, operatorColumnId, measurementColumnId, tolerance) => {
-          void runGageRrAnalysis(partColumnId, operatorColumnId, measurementColumnId, tolerance)
-        }}
-      />
-      <SubgroupControlChartDialog
-        open={subgroupControlChartDialogOpen}
-        initialGroupColumn={categoryColumns[0]?.id ?? ''}
-        initialMeasurementColumn={numericColumns[0]?.id ?? ''}
-        categoryColumns={categoryColumns}
-        numericColumns={numericColumns}
-        language={language}
-        onOpenChange={setSubgroupControlChartDialogOpen}
-        onSubmit={(kind, groupColumnId, measurementColumnId) => {
-          void runSubgroupControlChartAnalysis(kind, groupColumnId, measurementColumnId)
-        }}
-      />
-      <ChiSquareGoodnessOfFitDialog
-        open={chiSquareGoodnessOfFitDialogOpen}
-        initialColumn={columns[0]?.id ?? ''}
-        columns={columns}
-        language={language}
-        onOpenChange={setChiSquareGoodnessOfFitDialogOpen}
-        onSubmit={(columnId, alpha) => {
-          void runChiSquareGoodnessOfFit(columnId, alpha)
-        }}
-      />
-      <CompareVariancesDialog
-        open={varianceDialogOpen}
-        initialColumn1={numericColumns[0]?.id ?? ''}
-        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setVarianceDialogOpen}
-        onSubmit={(columnId1, columnId2, alpha) => {
-          void runVarianceComparison(columnId1, columnId2, alpha)
-        }}
-      />
-      <OneSamplePoissonRateDialog
-        open={oneSamplePoissonDialogOpen}
-        initialColumn={targetColumn}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setOneSamplePoissonDialogOpen}
-        onSubmit={(columnId, exposurePerObservation, hypothesizedRate, alpha) => {
-          void runOneSamplePoissonAnalysis(
-            columnId,
-            exposurePerObservation,
-            hypothesizedRate,
-            alpha,
-          )
-        }}
-      />
-      <TwoSamplePoissonRateDialog
-        open={twoSamplePoissonDialogOpen}
-        initialColumn1={numericColumns[0]?.id ?? ''}
-        initialColumn2={numericColumns[1]?.id ?? numericColumns[0]?.id ?? ''}
-        columns={numericColumns}
-        language={language}
-        onOpenChange={setTwoSamplePoissonDialogOpen}
-        onSubmit={(columnId1, exposure1, columnId2, exposure2, alpha) => {
-          void runTwoSamplePoissonAnalysis(columnId1, exposure1, columnId2, exposure2, alpha)
-        }}
-      />
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-overlay" />
+          <Dialog.Content className="dialog-content app-dialog">
+            <Dialog.Title className="app-dialog-title">
+              {appDialog === 'settings'
+                ? language === 'sv'
+                  ? 'Inställningar'
+                  : 'Settings'
+                : appDialog === 'about'
+                  ? language === 'sv'
+                    ? 'Om StatLab'
+                    : 'About StatLab'
+                  : language === 'sv'
+                    ? 'Analysstatus'
+                    : 'Analysis status'}
+            </Dialog.Title>
+            <Dialog.Description className="app-dialog-description">
+              {appDialog === 'settings'
+                ? language === 'sv'
+                  ? 'Välj språk och utseende för arbetsytan.'
+                  : 'Choose the workspace language and appearance.'
+                : appDialog === 'about'
+                  ? language === 'sv'
+                    ? 'StatLab är en fristående statistisk arbetsbok.'
+                    : 'StatLab is an independent statistical workbook.'
+                  : language === 'sv'
+                    ? 'Översikt över verktyg och verifieringsstatus.'
+                    : 'Overview of available tools and verification status.'}
+            </Dialog.Description>
+            <Dialog.Close asChild>
+              <button
+                className="icon-button app-dialog-close"
+                type="button"
+                aria-label={language === 'sv' ? 'Stäng dialog' : 'Close dialog'}
+              >
+                <X size={15} />
+              </button>
+            </Dialog.Close>
+            {appDialog === 'settings' ? (
+              <div className="app-settings">
+                <fieldset className="app-setting-group">
+                  <legend>{language === 'sv' ? 'Språk' : 'Language'}</legend>
+                  <div className="app-setting-options" role="group">
+                    <button
+                      type="button"
+                      aria-pressed={language === 'sv'}
+                      onClick={() => changeLanguage('sv')}
+                    >
+                      Svenska
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={language === 'en'}
+                      onClick={() => changeLanguage('en')}
+                    >
+                      English
+                    </button>
+                  </div>
+                </fieldset>
+                <fieldset className="app-setting-group">
+                  <legend>{language === 'sv' ? 'Utseende' : 'Appearance'}</legend>
+                  <div className="app-setting-options" role="group">
+                    <button
+                      type="button"
+                      aria-pressed={theme === 'light'}
+                      onClick={() => setTheme('light')}
+                    >
+                      {language === 'sv' ? 'Ljust' : 'Light'}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={theme === 'dark'}
+                      onClick={() => setTheme('dark')}
+                    >
+                      {language === 'sv' ? 'Mörkt' : 'Dark'}
+                    </button>
+                  </div>
+                </fieldset>
+              </div>
+            ) : appDialog === 'about' ? (
+              <p className="app-dialog-copy">
+                {language === 'sv'
+                  ? 'StatLab erbjuder ett virtuellt arbetsblad och lokala verktyg för statistik, diagram och kvalitetsanalys. Resultat markeras som ej verifierade tills de jämförts med dokumenterade referensvärden.'
+                  : 'StatLab provides a virtual worksheet and local tools for statistics, graphs, and quality analysis. Results remain unverified until compared with documented reference values.'}
+              </p>
+            ) : (
+              <div className="app-dialog-copy">
+                <p>
+                  {language === 'sv'
+                    ? `${menuContent.statistics.length + 1} statistikkommandon, ${menuContent.graphs.length} diagramverktyg och ${menuContent.quality.length} kvalitetsverktyg finns i menyerna.`
+                    : `${menuContent.statistics.length + 1} statistical commands, ${menuContent.graphs.length} graph tools, and ${menuContent.quality.length} quality tools are available in the menus.`}
+                </p>
+                <p>
+                  {language === 'sv'
+                    ? 'Analysresultat visar uttryckligen när oberoende referensverifiering saknas. Öppna dialoger är inte i sig ett bevis på numerisk verifiering.'
+                    : 'Analysis results explicitly identify when independent reference verification is missing. An available dialog does not by itself imply numerical verification.'}
+                </p>
+              </div>
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       {toast && (
         <div className="toast" role="status">
           {toast}

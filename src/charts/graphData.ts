@@ -1,6 +1,6 @@
 import jStat from 'jstat'
 
-export type GraphKind =
+export type GraphBuilderKind =
   | 'histogram'
   | 'boxplot'
   | 'individual'
@@ -11,6 +11,8 @@ export type GraphKind =
   | 'normalQQ'
   | 'timeSeries'
 
+export type GraphKind = GraphBuilderKind | 'survival' | 'autocorrelation' | 'powerCurve'
+
 export interface GraphTrace {
   type: 'histogram' | 'box' | 'scatter' | 'bar'
   name: string
@@ -18,11 +20,17 @@ export interface GraphTrace {
   y?: number[]
   mode?: 'markers' | 'lines+markers' | 'lines'
   lineShape?: 'hv'
+  lineDash?: 'solid' | 'dash' | 'dot' | 'dashdot'
+  color?: string
+  fill?: 'tonexty'
+  fillColor?: string
+  showLegend?: boolean
   yAxis?: 'y2'
 }
 
 export interface GraphModel {
   kind: GraphKind
+  stableKey?: object
   title: string
   xTitle: string
   yTitle: string
@@ -32,7 +40,7 @@ export interface GraphModel {
 }
 
 export interface GraphInput {
-  kind: GraphKind
+  kind: GraphBuilderKind
   values?: readonly (number | null | undefined)[]
   xValues?: readonly (number | null | undefined)[]
   categories?: readonly (string | null | undefined)[]
@@ -213,12 +221,12 @@ export function buildGraph(input: GraphInput): GraphModel {
 }
 
 function model(
-  kind: GraphKind,
+  kind: GraphBuilderKind,
   isSwedish: boolean,
   sampleCount: number,
   data: GraphTrace[],
 ): GraphModel {
-  const labels: Record<GraphKind, [string, string, string]> = {
+  const labels: Record<GraphBuilderKind, [string, string, string]> = {
     histogram: [
       isSwedish ? 'Histogram' : 'Histogram',
       isSwedish ? 'Mätvärde' : 'Measurement',

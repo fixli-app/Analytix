@@ -12,36 +12,49 @@ const palette = ['#2f7861', '#e16d4c', '#d2a23b', '#6484a2', '#8e6e9e']
 
 export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
   const plotRef = useRef<HTMLDivElement>(null)
+  const graphRef = useRef(graph)
   const [loadError, setLoadError] = useState(false)
   const isSwedish = language === 'sv'
+  const graphRevision = graph.stableKey ?? graph
+  if (graph.stableKey === undefined || graph.stableKey !== graphRef.current.stableKey) {
+    graphRef.current = graph
+  }
 
   useEffect(() => {
+    const activeGraph = graphRef.current
     const element = plotRef.current
     if (!element) return
     let active = true
     let plotly: typeof import('plotly.js') | null = null
-    const data = graph.data.map((trace, index) => toPlotlyTrace(trace, index))
+    const data = activeGraph.data.map((trace, index) => toPlotlyTrace(trace, index))
     const textColor = theme === 'dark' ? '#e4eee8' : '#23322d'
     const gridColor = theme === 'dark' ? '#35483f' : '#dce3dd'
     const layout: Partial<Layout> = {
-      title: { text: graph.title, x: 0.02, xanchor: 'left' },
+      title: { text: activeGraph.title, x: 0.02, xanchor: 'left' },
       autosize: true,
       height: 390,
-      margin: { l: 58, r: graph.cumulativeAxis ? 58 : 20, t: 54, b: 55 },
+      margin: { l: 58, r: activeGraph.cumulativeAxis ? 58 : 20, t: 54, b: 55 },
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
       font: { family: 'DM Sans, sans-serif', color: textColor, size: 11 },
-      showlegend: graph.data.length > 1,
+      showlegend: activeGraph.data.length > 1,
       legend: { orientation: 'h', y: 1.14, x: 0 },
       bargap: 0.15,
-      xaxis: { title: { text: graph.xTitle }, automargin: true, gridcolor: gridColor },
+      xaxis: { title: { text: activeGraph.xTitle }, automargin: true, gridcolor: gridColor },
       yaxis: {
-        title: { text: graph.yTitle },
+        title: { text: activeGraph.yTitle },
         automargin: true,
         gridcolor: gridColor,
         zeroline: false,
+        ...(activeGraph.kind === 'survival'
+          ? { range: [0, 1], tickformat: '.0%' }
+          : activeGraph.kind === 'autocorrelation'
+            ? { range: [-1, 1], zeroline: true }
+            : activeGraph.kind === 'powerCurve'
+              ? { range: [0, 1], tickformat: '.0%' }
+              : {}),
       },
-      ...(graph.cumulativeAxis
+      ...(activeGraph.cumulativeAxis
         ? {
             yaxis2: {
               title: { text: isSwedish ? 'Kumulativ procent' : 'Cumulative percent' },
@@ -76,7 +89,7 @@ export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
       active = false
       plotly?.purge(element)
     }
-  }, [graph, isSwedish, theme])
+  }, [graphRevision, isSwedish, theme])
 
   return (
     <section className="general-graph" aria-label={graph.title}>
@@ -108,7 +121,7 @@ export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
 }
 
 function toPlotlyTrace(trace: GraphTrace, index: number): Data {
-  const color = palette[index % palette.length]
+  const color = trace.color ?? palette[index % palette.length]
   if (trace.type === 'histogram') {
     return { type: 'histogram', x: trace.x as number[], name: trace.name, marker: { color } }
   }
@@ -130,8 +143,16 @@ function toPlotlyTrace(trace: GraphTrace, index: number): Data {
     y: trace.y,
     mode: trace.mode,
     name: trace.name,
+    showlegend: trace.showLegend,
     yaxis: trace.yAxis,
+    fill: trace.fill,
+    fillcolor: trace.fillColor,
     marker: { color, size: 7 },
-    line: { color, shape: trace.lineShape ?? 'linear', width: 1.6 },
+    line: {
+      color,
+      shape: trace.lineShape ?? 'linear',
+      dash: trace.lineDash,
+      width: 1.6,
+    },
   }
 }

@@ -14,7 +14,20 @@ export interface WorkbookSnapshot {
   rows: SheetRow[]
 }
 
+export interface WorksheetSnapshot extends WorkbookSnapshot {
+  id: string
+  name: string
+}
+
+export interface WorkbookDocument {
+  version: 1
+  activeSheetId: string
+  sheets: WorksheetSnapshot[]
+}
+
 interface WorkbookState extends WorkbookSnapshot {
+  worksheets: WorksheetSnapshot[]
+  activeSheetId: string
   activeCell: { row: number; column: number }
   past: WorkbookSnapshot[]
   future: WorkbookSnapshot[]
@@ -25,11 +38,21 @@ interface WorkbookState extends WorkbookSnapshot {
   insertRow: (rowIndex: number) => void
   addColumn: () => void
   appendNumericColumn: (name: string, values: readonly (string | null)[]) => string
+  appendColumn: (
+    name: string,
+    type: SheetColumn['type'],
+    values: readonly (string | null)[],
+  ) => string
   deleteRow: (rowIndex: number) => void
   deleteColumn: (columnId: string) => boolean
   renameColumn: (columnId: string, name: string) => void
   replaceMissing: (columnId: string, replacement: string) => void
   replaceData: (columns: SheetColumn[], rows: SheetRow[]) => void
+  createWorksheet: (name: string) => void
+  renameWorksheet: (id: string, name: string) => boolean
+  deleteWorksheet: (id: string) => boolean
+  activateWorksheet: (id: string) => void
+  replaceWorkbook: (workbook: WorkbookDocument | WorkbookSnapshot) => void
   sortByColumn: (columnId: string, direction?: 'ascending' | 'descending') => void
   undo: () => void
   redo: () => void
@@ -71,6 +94,14 @@ export const useWorkbookStore = create<WorkbookState>()(
   immer((set) => ({
     columns: starterColumns,
     rows: starterRows,
+    worksheets: [
+      {
+        id: 'worksheet-1',
+        name: 'Arbetsblad 1',
+        ...snapshot({ columns: starterColumns, rows: starterRows }),
+      },
+    ],
+    activeSheetId: 'worksheet-1',
     activeCell: { row: 0, column: 0 },
     past: [],
     future: [],
@@ -145,6 +176,21 @@ export const useWorkbookStore = create<WorkbookState>()(
       })
       return columnId
     },
+    appendColumn: (name, type, values) => {
+      let columnId = ''
+      set((state) => {
+        state.past.push(snapshot(state))
+        state.future = []
+        let nextNumber = state.columns.length + 1
+        while (state.columns.some((column) => column.id === `C${nextNumber}`)) nextNumber += 1
+        columnId = `C${nextNumber}`
+        state.columns.push({ id: columnId, name, type })
+        state.rows.forEach((row, index) => {
+          row[columnId] = values[index] ?? ''
+        })
+      })
+      return columnId
+    },
     deleteRow: (rowIndex) =>
       set((state) => {
         if (rowIndex < 0 || rowIndex >= state.rows.length) return
@@ -194,6 +240,114 @@ export const useWorkbookStore = create<WorkbookState>()(
         state.rows = rows
         state.activeCell = { row: 0, column: 0 }
       }),
+    createWorksheet: (name) =>
+      set((state) => {
+        const current = state.worksheets.find((worksheet) => worksheet.id === state.activeSheetId)
+        if (current) {
+          current.columns = state.columns.map((column) => ({ ...column }))
+          current.rows = state.rows.map((row) => ({ ...row }))
+        }
+        let number = 1
+        while (state.worksheets.some((worksheet) => worksheet.id === `worksheet-${number}`))
+          number++
+        const id = `worksheet-${number}`
+        const columns = [{ id: 'C1', name: 'C1', type: 'numeric' as const }]
+        const rows = [{ C1: '' }]
+        state.worksheets.push({ id, name: `${name} ${number}`, columns, rows })
+        state.activeSheetId = id
+        state.columns = columns.map((column) => ({ ...column }))
+        state.rows = rows.map((row) => ({ ...row }))
+        state.activeCell = { row: 0, column: 0 }
+        state.past = []
+        state.future = []
+      }),
+    renameWorksheet: (id, name) => {
+      let renamed = false
+      const normalizedName = name.trim()
+      set((state) => {
+        const worksheet = state.worksheets.find((item) => item.id === id)
+        if (
+          !worksheet ||
+          !normalizedName ||
+          state.worksheets.some(
+            (item) =>
+              item.id !== id &&
+              item.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
+          )
+        ) {
+          return
+        }
+        worksheet.name = normalizedName
+        renamed = true
+      })
+      return renamed
+    },
+    deleteWorksheet: (id) => {
+      let deleted = false
+      set((state) => {
+        if (state.worksheets.length <= 1) return
+        const index = state.worksheets.findIndex((worksheet) => worksheet.id === id)
+        if (index < 0) return
+        state.worksheets.splice(index, 1)
+        deleted = true
+        if (id !== state.activeSheetId) return
+        const nextWorksheet = state.worksheets[Math.min(index, state.worksheets.length - 1)]
+        state.activeSheetId = nextWorksheet.id
+        state.columns = nextWorksheet.columns.map((column) => ({ ...column }))
+        state.rows = nextWorksheet.rows.map((row) => ({ ...row }))
+        state.activeCell = { row: 0, column: 0 }
+        state.past = []
+        state.future = []
+      })
+      return deleted
+    },
+    activateWorksheet: (id) =>
+      set((state) => {
+        if (id === state.activeSheetId) return
+        const target = state.worksheets.find((worksheet) => worksheet.id === id)
+        if (!target) return
+        const current = state.worksheets.find((worksheet) => worksheet.id === state.activeSheetId)
+        if (current) {
+          current.columns = state.columns.map((column) => ({ ...column }))
+          current.rows = state.rows.map((row) => ({ ...row }))
+        }
+        state.activeSheetId = id
+        state.columns = target.columns.map((column) => ({ ...column }))
+        state.rows = target.rows.map((row) => ({ ...row }))
+        state.activeCell = { row: 0, column: 0 }
+        state.past = []
+        state.future = []
+      }),
+    replaceWorkbook: (workbook) =>
+      set((state) => {
+        const sheets =
+          'sheets' in workbook
+            ? workbook.sheets.map((worksheet) => ({
+                id: worksheet.id,
+                name: worksheet.name,
+                ...snapshot(worksheet),
+              }))
+            : [
+                {
+                  id: 'worksheet-1',
+                  name: 'Arbetsblad 1',
+                  ...snapshot(workbook),
+                },
+              ]
+        const activeSheetId =
+          'sheets' in workbook &&
+          sheets.some((worksheet) => worksheet.id === workbook.activeSheetId)
+            ? workbook.activeSheetId
+            : sheets[0].id
+        const activeWorksheet = sheets.find((worksheet) => worksheet.id === activeSheetId)!
+        state.worksheets = sheets
+        state.activeSheetId = activeSheetId
+        state.columns = activeWorksheet.columns.map((column) => ({ ...column }))
+        state.rows = activeWorksheet.rows.map((row) => ({ ...row }))
+        state.activeCell = { row: 0, column: 0 }
+        state.past = []
+        state.future = []
+      }),
     sortByColumn: (columnId, direction = 'ascending') =>
       set((state) => {
         state.past.push(snapshot(state))
@@ -232,4 +386,20 @@ export const useWorkbookStore = create<WorkbookState>()(
 
 export function workbookSnapshot(state: WorkbookSnapshot): WorkbookSnapshot {
   return snapshot(state)
+}
+
+export function workbookDocument(
+  state: Pick<WorkbookState, 'worksheets' | 'activeSheetId' | 'columns' | 'rows'>,
+): WorkbookDocument {
+  const sheets = state.worksheets.map((worksheet) => ({
+    id: worksheet.id,
+    name: worksheet.name,
+    ...snapshot(worksheet),
+  }))
+  const activeWorksheet = sheets.find((worksheet) => worksheet.id === state.activeSheetId)
+  if (activeWorksheet) {
+    activeWorksheet.columns = state.columns.map((column) => ({ ...column }))
+    activeWorksheet.rows = state.rows.map((row) => ({ ...row }))
+  }
+  return { version: 1, activeSheetId: state.activeSheetId, sheets }
 }
