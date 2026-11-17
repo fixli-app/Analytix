@@ -15,7 +15,6 @@ import {
   ArrowDownAZ,
   BarChart3,
   Check,
-  ChevronDown,
   CircleHelp,
   Clipboard,
   Clock3,
@@ -51,7 +50,7 @@ import {
   type WorksheetSnapshot,
 } from './store/workbook'
 import { statsWorker } from './workers/client'
-import { loadAutosave, saveAutosave } from './utils/projects'
+import { deleteAutosave, loadAutosave, saveAutosave } from './utils/projects'
 import { workbookDocument } from './store/workbook'
 import { filterRowIndexes } from './utils/filterRows'
 import { selectionBounds, selectionToTsv } from './utils/worksheetSelection'
@@ -176,7 +175,7 @@ const menuKeys = [
   'help',
 ] as const
 const menuContent: Record<string, string[]> = {
-  file: ['newProject', 'openProject', 'saveProject', 'importData', 'exportCsv'],
+  file: ['newProject', 'openProject', 'saveProject', 'importData', 'exportCsv', 'deleteProject'],
   edit: ['undo', 'redo', 'copySession'],
   data: [
     'sortAscending',
@@ -235,6 +234,7 @@ const menuContent: Record<string, string[]> = {
 }
 const actionLabelKeys: Record<string, string> = {
   newProject: 'newProject',
+  deleteProject: 'deleteProject',
   openProject: 'openProject',
   saveProject: 'saveProject',
   importData: 'importData',
@@ -1081,7 +1081,9 @@ function App() {
     return savedLanguage === 'en' || savedLanguage === 'sv' ? savedLanguage : i18n.language
   })
   const [projectName, setProjectName] = useState(
-    () => localStorage.getItem('statlab-project-name') || 'Produktionsanalys',
+    () =>
+      localStorage.getItem('statlab-project-name') ||
+      (language === 'sv' ? 'Nytt projekt' : 'New project'),
   )
   const t = (key: string) => i18n.t(key, { lng: language })
   const columns = useWorkbookStore((state) => state.columns)
@@ -1109,10 +1111,14 @@ function App() {
   const setActiveCell = useWorkbookStore((state) => state.setActiveCell)
   const undo = useWorkbookStore((state) => state.undo)
   const redo = useWorkbookStore((state) => state.redo)
-  const [targetColumn, setTargetColumn] = useState('C4')
+  const canUndo = useWorkbookStore((state) => state.past.length > 0)
+  const canRedo = useWorkbookStore((state) => state.future.length > 0)
+  const [targetColumn, setTargetColumn] = useState('')
   const [filterQuery, setFilterQuery] = useState('')
   const [selectionAnchor, setSelectionAnchor] = useState({ row: 0, column: 0 })
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
+  const [renamingColumnId, setRenamingColumnId] = useState<string | null>(null)
+  const [columnNameDraft, setColumnNameDraft] = useState('')
   const [renamingWorksheetId, setRenamingWorksheetId] = useState<string | null>(null)
   const [worksheetNameDraft, setWorksheetNameDraft] = useState('')
   const [pendingDeleteWorksheetId, setPendingDeleteWorksheetId] = useState<string | null>(null)
@@ -1173,6 +1179,8 @@ function App() {
     localStorage.getItem('statlab-theme') === 'dark' ? 'dark' : 'light',
   )
   const [savedAt, setSavedAt] = useState<Date | null>(null)
+  const [workbookReady, setWorkbookReady] = useState(false)
+  const [isDeletingProject, setIsDeletingProject] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1392,17 +1400,20 @@ function App() {
     let active = true
     void loadAutosave()
       .then((saved) => {
-        if (active && saved) {
-          replaceWorkbook(saved)
-        }
+        if (!active) return
+        if (saved) replaceWorkbook(saved)
+        setWorkbookReady(true)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (active) setWorkbookReady(true)
+      })
     return () => {
       active = false
     }
   }, [replaceWorkbook])
 
   useEffect(() => {
+    if (!workbookReady || isDeletingProject) return
     const timer = window.setTimeout(() => {
       const state = useWorkbookStore.getState()
       void saveAutosave(workbookDocument(state))
@@ -1410,7 +1421,7 @@ function App() {
         .catch(() => undefined)
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [activeSheetId, columns, rows, worksheets])
+  }, [activeSheetId, columns, isDeletingProject, rows, workbookReady, worksheets])
 
   useEffect(() => {
     const listener = (event: globalThis.KeyboardEvent) => {
@@ -1468,6 +1479,10 @@ function App() {
     () => columns.filter((column) => column.type === 'numeric'),
     [columns],
   )
+  useEffect(() => {
+    if (numericColumns.some((column) => column.id === targetColumn)) return
+    setTargetColumn(numericColumns[0]?.id ?? '')
+  }, [numericColumns, targetColumn])
   const categoryColumns = useMemo(
     () => columns.filter((column) => column.type === 'text'),
     [columns],
@@ -3046,8 +3061,31 @@ function App() {
     }
   }
 
+  async function deleteCurrentProject() {
+    if (!window.confirm(t('confirmDeleteProject'))) return
+    setIsDeletingProject(true)
+    try {
+      await deleteAutosave()
+      replaceWorkbook({ columns: [], rows: [] })
+      setSession(null)
+      setFilterQuery('')
+      setTargetColumn('')
+      setProjectName(language === 'sv' ? 'Nytt projekt' : 'New project')
+      setSavedAt(null)
+      setToast(t('projectDeleted'))
+    } catch {
+      setToast(t('projectDeleteFailed'))
+    } finally {
+      setIsDeletingProject(false)
+    }
+  }
+
   function showMenuAction(action: string) {
     setMenuOpen(null)
+    if (action === 'deleteProject') {
+      void deleteCurrentProject()
+      return
+    }
     if (action === 'newProject') {
       const confirmed = window.confirm(
         language === 'sv'
@@ -3055,15 +3093,10 @@ function App() {
           : 'Create a new project? Unsaved changes will be replaced.',
       )
       if (!confirmed) return
-      replaceWorkbook({
-        columns: [
-          { id: 'C1', name: language === 'sv' ? 'Variabel 1' : 'Variable 1', type: 'numeric' },
-        ],
-        rows: [],
-      })
+      replaceWorkbook({ columns: [], rows: [] })
       setSession(null)
       setFilterQuery('')
-      setTargetColumn('C1')
+      setTargetColumn('')
       setProjectName(language === 'sv' ? 'Nytt projekt' : 'New project')
       setToast(language === 'sv' ? 'Nytt projekt skapat.' : 'New project created.')
     } else if (action === 'addRow') insertRow(activeCell.row)
@@ -3519,6 +3552,14 @@ function App() {
     setMenuOpen(key)
   }
 
+  if (!workbookReady) {
+    return (
+      <div className="app-loading" role="status">
+        {t('loadingWorkbook')}
+      </div>
+    )
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -3614,7 +3655,7 @@ function App() {
           className="toolbar-button"
           type="button"
           title={t('undo')}
-          disabled={useWorkbookStore((state) => state.past.length === 0) && !hasDraft}
+          disabled={!canUndo && !hasDraft}
           onClick={undo}
         >
           <Undo2 size={15} />
@@ -3624,7 +3665,7 @@ function App() {
           className="toolbar-button"
           type="button"
           title={t('redo')}
-          disabled={useWorkbookStore((state) => state.future.length === 0)}
+          disabled={!canRedo}
           onClick={redo}
         >
           <Redo2 size={15} />
@@ -3955,26 +3996,62 @@ function App() {
                   <th className="corner">#</th>
                   {columns.map((column) => (
                     <th key={column.id} style={{ width: column.type === 'text' ? 138 : 112 }}>
-                      <button
-                        className="column-label"
-                        type="button"
-                        onClick={() => {
-                          const index = columns.findIndex((item) => item.id === column.id)
-                          setActiveCell(activeCell.row, index)
-                          if (column.type === 'numeric') setTargetColumn(column.id)
-                          else {
-                            const nextName = window.prompt(
-                              language === 'sv' ? 'Kolumnnamn' : 'Column name',
-                              column.name,
-                            )
-                            if (nextName?.trim()) renameColumn(column.id, nextName.trim())
-                          }
-                        }}
-                      >
-                        <span className="column-id">{column.id}</span>
-                        {column.name}
-                        <ChevronDown size={10} />
-                      </button>
+                      {renamingColumnId === column.id ? (
+                        <form
+                          className="column-label-editing"
+                          onSubmit={(event) => {
+                            event.preventDefault()
+                            const nextName = columnNameDraft.trim()
+                            if (!nextName) {
+                              setToast(t('columnNameRequired'))
+                              return
+                            }
+                            renameColumn(column.id, nextName)
+                            setRenamingColumnId(null)
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            maxLength={64}
+                            value={columnNameDraft}
+                            onChange={(event) => setColumnNameDraft(event.target.value)}
+                            aria-label={t('newColumnName')}
+                          />
+                          <button
+                            className="icon-button"
+                            type="submit"
+                            title={t('saveName')}
+                            aria-label={t('saveName')}
+                          >
+                            <Check size={13} />
+                          </button>
+                          <button
+                            className="icon-button"
+                            type="button"
+                            title={t('cancelRename')}
+                            aria-label={t('cancelRename')}
+                            onClick={() => setRenamingColumnId(null)}
+                          >
+                            <X size={13} />
+                          </button>
+                        </form>
+                      ) : (
+                        <button
+                          className="column-label"
+                          type="button"
+                          onClick={() => {
+                            const index = columns.findIndex((item) => item.id === column.id)
+                            setActiveCell(activeCell.row, index)
+                            if (column.type === 'numeric') setTargetColumn(column.id)
+                            setColumnNameDraft(column.name)
+                            setRenamingColumnId(column.id)
+                          }}
+                        >
+                          <span className="column-id">{column.id}</span>
+                          {column.name}
+                          <Pencil size={10} />
+                        </button>
+                      )}
                       <span className="column-type">
                         {column.type === 'numeric'
                           ? 'numerisk'
@@ -3987,7 +4064,14 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {visibleRowIndexes.length === 0 && (
+                {rows.length === 0 && (
+                  <tr>
+                    <td className="empty-filter" colSpan={columns.length + 1}>
+                      {t('emptySheet')}
+                    </td>
+                  </tr>
+                )}
+                {rows.length > 0 && visibleRowIndexes.length === 0 && (
                   <tr>
                     <td className="empty-filter" colSpan={columns.length + 1}>
                       {t('noMatchingRows')}

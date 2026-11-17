@@ -58,31 +58,6 @@ interface WorkbookState extends WorkbookSnapshot {
   redo: () => void
 }
 
-const starterColumns: SheetColumn[] = [
-  { id: 'C1', name: 'Batch', type: 'text' },
-  { id: 'C2', name: 'Temp °C', type: 'numeric' },
-  { id: 'C3', name: 'Tryck', type: 'numeric' },
-  { id: 'C4', name: 'Utbyte %', type: 'numeric' },
-  { id: 'C5', name: 'Skift', type: 'text' },
-]
-
-const starterRows: SheetRow[] = [
-  ['B-101', '78.2', '4.1', '92.4', 'Morgon'],
-  ['B-102', '79.1', '4.3', '94.1', 'Morgon'],
-  ['B-103', '77.8', '4.0', '91.8', 'Kväll'],
-  ['B-104', '80.4', '4.5', '95.6', 'Kväll'],
-  ['B-105', '78.9', '4.2', '93.7', 'Morgon'],
-  ['B-106', '81.2', '4.7', '96.3', 'Natt'],
-  ['B-107', '77.5', '3.9', '90.9', 'Natt'],
-  ['B-108', '79.8', '4.4', '94.8', 'Kväll'],
-  ['B-109', '80.1', '4.6', '95.1', 'Morgon'],
-  ['B-110', '78.4', '4.1', '92.8', 'Natt'],
-  ['B-111', '81.0', '4.8', '96.0', 'Kväll'],
-  ['B-112', '79.3', '4.3', '', 'Morgon'],
-].map((values) =>
-  Object.fromEntries(starterColumns.map((column, index) => [column.id, values[index]])),
-)
-
 function snapshot(state: WorkbookSnapshot): WorkbookSnapshot {
   return {
     columns: state.columns.map((column) => ({ ...column })),
@@ -92,13 +67,13 @@ function snapshot(state: WorkbookSnapshot): WorkbookSnapshot {
 
 export const useWorkbookStore = create<WorkbookState>()(
   immer((set) => ({
-    columns: starterColumns,
-    rows: starterRows,
+    columns: [],
+    rows: [],
     worksheets: [
       {
         id: 'worksheet-1',
         name: 'Arbetsblad 1',
-        ...snapshot({ columns: starterColumns, rows: starterRows }),
+        ...snapshot({ columns: [], rows: [] }),
       },
     ],
     activeSheetId: 'worksheet-1',

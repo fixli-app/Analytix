@@ -17,6 +17,11 @@ export async function saveAutosave(workbook: WorkbookDocument): Promise<void> {
   await db.put('workbooks', workbook, autosaveKey)
 }
 
+export async function deleteAutosave(): Promise<void> {
+  const db = await database()
+  await db.delete('workbooks', autosaveKey)
+}
+
 export async function loadAutosave(): Promise<WorkbookDocument | WorkbookSnapshot | undefined> {
   const db = await database()
   return db.get('workbooks', autosaveKey) as Promise<

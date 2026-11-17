@@ -64,6 +64,14 @@ input:focus-visible {
   flex-direction: column;
   min-height: 100vh;
 }
+.app-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: var(--muted);
+  background: var(--canvas);
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+}
 .topbar {
   height: 58px;
   display: flex;
@@ -583,6 +591,28 @@ input:focus-visible {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.column-label-editing {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+.column-label-editing input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+.column-label-editing .icon-button {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  padding: 4px;
 }
 .column-type {
   display: block;

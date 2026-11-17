@@ -1,6 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useWorkbookStore, workbookDocument } from '../workbook'
 
+describe('default workbook', () => {
+  it('starts with one empty worksheet', () => {
+    const state = useWorkbookStore.getState()
+
+    expect(state.columns).toEqual([])
+    expect(state.rows).toEqual([])
+    expect(state.worksheets).toHaveLength(1)
+    expect(state.worksheets[0].columns).toEqual([])
+    expect(state.worksheets[0].rows).toEqual([])
+  })
+})
+
 describe('workbook history and editing', () => {
   beforeEach(() => {
     useWorkbookStore.setState({
@@ -125,6 +137,27 @@ describe('workbook history and editing', () => {
   it('does not allow deleting the last column', () => {
     expect(useWorkbookStore.getState().deleteColumn('C1')).toBe(false)
     expect(useWorkbookStore.getState().columns).toHaveLength(1)
+  })
+
+  it('renames columns regardless of their data type', () => {
+    useWorkbookStore.setState({
+      columns: [
+        { id: 'C1', name: 'Numeric', type: 'numeric' },
+        { id: 'C2', name: 'Date', type: 'date' },
+        { id: 'C3', name: 'Text', type: 'text' },
+      ],
+      rows: [],
+    })
+
+    useWorkbookStore.getState().renameColumn('C1', 'Measurement')
+    useWorkbookStore.getState().renameColumn('C2', 'Recorded at')
+    useWorkbookStore.getState().renameColumn('C3', 'Category')
+
+    expect(useWorkbookStore.getState().columns.map((column) => column.name)).toEqual([
+      'Measurement',
+      'Recorded at',
+      'Category',
+    ])
   })
 
   it('deletes a column and restores it with undo', () => {
