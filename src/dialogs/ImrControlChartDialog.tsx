@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import type { SheetColumn } from '../store/workbook'
+import type { ImrRuleSet } from '../stats/imrControlChart'
 
 interface ImrControlChartDialogProps {
   open: boolean
@@ -9,7 +10,7 @@ interface ImrControlChartDialogProps {
   columns: SheetColumn[]
   language: string
   onOpenChange: (open: boolean) => void
-  onSubmit: (columnId: string) => void
+  onSubmit: (columnId: string, ruleSet: ImrRuleSet) => void
 }
 
 export function ImrControlChartDialog({
@@ -21,6 +22,7 @@ export function ImrControlChartDialog({
   onSubmit,
 }: ImrControlChartDialogProps) {
   const [columnId, setColumnId] = useState(initialColumn)
+  const [ruleSet, setRuleSet] = useState<ImrRuleSet>('basic')
   const isSwedish = language === 'sv'
   const selectedColumnId = columns.some((column) => column.id === columnId)
     ? columnId
@@ -29,7 +31,7 @@ export function ImrControlChartDialog({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedColumnId) return
-    onSubmit(selectedColumnId)
+    onSubmit(selectedColumnId, ruleSet)
     onOpenChange(false)
   }
 
@@ -73,10 +75,26 @@ export function ImrControlChartDialog({
                 ))}
               </select>
             </label>
+            <label className="dialog-field">
+              <span>{isSwedish ? 'Regeluppsättning' : 'Rule set'}</span>
+              <select
+                value={ruleSet}
+                onChange={(event) => setRuleSet(event.target.value as ImrRuleSet)}
+              >
+                <option value="basic">
+                  {isSwedish ? 'Grund: 3σ + 8 på samma sida' : 'Basic: 3σ + 8 on one side'}
+                </option>
+                <option value="nelson">{isSwedish ? 'Nelson 2–8' : 'Nelson 2–8'}</option>
+              </select>
+            </label>
             <p className="session-caption">
-              {isSwedish
-                ? 'Styrgränser skattas från MR̄/1,128 (I) och 3,267 × MR̄ (MR). Signaler: punkter utanför 3σ och åtta i rad på samma sida.'
-                : 'Limits use MR̄/1.128 (I) and 3.267 × MR̄ (MR). Signals: points beyond 3σ and eight consecutive points on one side.'}
+              {ruleSet === 'basic'
+                ? isSwedish
+                  ? 'Styrgränser skattas från MR̄/1,128 (I) och 3,267 × MR̄ (MR). Signaler: punkter utanför 3σ och åtta i rad på samma sida.'
+                  : 'Limits use MR̄/1.128 (I) and 3.267 × MR̄ (MR). Signals: points beyond 3σ and eight consecutive points on one side.'
+                : isSwedish
+                  ? 'Nelson 2–8 kontrolleras på individdiagrammet utöver punkter utanför 3σ. Saknade observationer bryter alla regel-fönster.'
+                  : 'Nelson 2–8 are checked on the individuals chart in addition to points beyond 3σ. Missing observations break all rule windows.'}
             </p>
             <div className="dialog-actions">
               <Dialog.Close asChild>

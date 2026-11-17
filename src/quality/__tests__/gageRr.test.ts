@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { crossedGageRr } from '../gageRr'
+import { crossedGageRr, destructiveGageRr } from '../gageRr'
 
 function knownComponentFixture() {
   const partOffset = Math.sqrt(50.375)
@@ -109,5 +109,39 @@ describe('crossedGageRr', () => {
     expect(interaction.sumSquares).toBe(0)
     expect(interaction.fStatistic).toBe(0)
     expect(interaction.pValue).toBe(1)
+  })
+})
+
+describe('destructiveGageRr', () => {
+  it('uses unique physical specimens within a balanced batch/operator design', () => {
+    const result = destructiveGageRr({
+      batches: ['B1', 'B1', 'B1', 'B1', 'B2', 'B2', 'B2', 'B2'],
+      operators: ['A', 'A', 'B', 'B', 'A', 'A', 'B', 'B'],
+      specimenIds: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'],
+      measurements: [9.9, 10.1, 10.2, 9.8, 19.9, 20.1, 20.2, 19.8],
+      tolerance: 12,
+    })
+
+    expect(result.batchCount).toBe(2)
+    expect(result.operatorCount).toBe(2)
+    expect(result.specimensPerCell).toBe(2)
+    expect(result.specimenCount).toBe(8)
+    expect(result.analysis.varianceComponents.repeatability).toBeCloseTo(0.05, 12)
+    expect(result.analysis.varianceComponents.partToPart).toBeCloseTo(50, 10)
+  })
+
+  it('rejects repeated or missing physical specimen identifiers', () => {
+    const input = {
+      batches: ['B1', 'B1', 'B2', 'B2', 'B1', 'B1', 'B2', 'B2'],
+      operators: ['A', 'A', 'A', 'A', 'B', 'B', 'B', 'B'],
+      specimenIds: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'],
+      measurements: [1, 2, 3, 4, 1, 2, 3, 4],
+    }
+    expect(() =>
+      destructiveGageRr({ ...input, specimenIds: ['S1', 'S1', ...input.specimenIds.slice(2)] }),
+    ).toThrow('exakt en gång')
+    expect(() =>
+      destructiveGageRr({ ...input, specimenIds: [null, ...input.specimenIds.slice(1)] }),
+    ).toThrow('unikt, ifyllt')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { imrControlChart } from '../imrControlChart'
+import { findNelsonRuleSignals, imrControlChart } from '../imrControlChart'
 
 describe('imrControlChart', () => {
   it('calculates individual and moving-range limits for a hand-worked fixture', () => {
@@ -56,6 +56,41 @@ describe('imrControlChart', () => {
     const result = imrControlChart([0, 1, 0, 1, null, 0, 1, 0, 1, 10, 11, 10, 11])
 
     expect(result.signals.filter((signal) => signal.rule === 'eight-on-one-side')).toEqual([])
+  })
+
+  it('detects Nelson rules 2 through 8 with contiguous windows', () => {
+    const cases = [
+      { rule: 'nelson-rule-2', values: Array.from({ length: 9 }, () => 0.25) },
+      { rule: 'nelson-rule-3', values: [-0.5, -0.3, -0.1, 0.1, 0.3, 0.5] },
+      { rule: 'nelson-rule-4', values: Array.from({ length: 14 }, (_, index) => index % 2) },
+      { rule: 'nelson-rule-5', values: [2.1, 0, 2.2] },
+      { rule: 'nelson-rule-6', values: [1.1, 1.2, 0, 1.3, 1.4] },
+      { rule: 'nelson-rule-7', values: Array.from({ length: 15 }, () => 0.5) },
+      { rule: 'nelson-rule-8', values: [1.1, -1.1, 1.2, -1.2, 1.1, -1.1, 1.2, -1.2] },
+    ] as const
+
+    cases.forEach(({ rule, values }) => {
+      const points = values.map((value, index) => ({ observation: index + 1, value }))
+      expect(findNelsonRuleSignals(points, 0, 1)).toContainEqual(expect.objectContaining({ rule }))
+    })
+  })
+
+  it('breaks Nelson rule windows at missing observations and replaces the basic eight-run rule', () => {
+    const gapPoints = [1, 2, 3, 4, 6, 7, 8, 9, 10].map((observation) => ({
+      observation,
+      value: 0.25,
+    }))
+    expect(findNelsonRuleSignals(gapPoints, 0, 1)).toEqual([])
+
+    const values = [
+      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 5, 6, 5, 6, 5, 6, 5, 6, 5, 6,
+    ]
+    const basic = imrControlChart(values)
+    const nelson = imrControlChart(values, 'nelson')
+    expect(basic.signals.some((signal) => signal.rule === 'eight-on-one-side')).toBe(true)
+    expect(nelson.ruleSet).toBe('nelson')
+    expect(nelson.signals.some((signal) => signal.rule === 'eight-on-one-side')).toBe(false)
+    expect(nelson.signals.some((signal) => signal.rule === 'nelson-rule-2')).toBe(true)
   })
 
   it('rejects invalid values and insufficient adjacent observations', () => {

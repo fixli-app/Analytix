@@ -6,25 +6,31 @@ interface GraphPlotProps {
   graph: GraphModel
   language: string
   theme: 'light' | 'dark'
+  onRendered?: (plot: HTMLDivElement) => void
 }
 
 const palette = ['#2f7861', '#e16d4c', '#d2a23b', '#6484a2', '#8e6e9e']
 
-export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
+export function GraphPlot({ graph, language, theme, onRendered }: GraphPlotProps) {
   const plotRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef(graph)
+  const onRenderedRef = useRef(onRendered)
   const [loadError, setLoadError] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const isSwedish = language === 'sv'
   const graphRevision = graph.stableKey ?? graph
   if (graph.stableKey === undefined || graph.stableKey !== graphRef.current.stableKey) {
     graphRef.current = graph
   }
+  onRenderedRef.current = onRendered
 
   useEffect(() => {
     const activeGraph = graphRef.current
     const element = plotRef.current
     if (!element) return
     let active = true
+    setLoadError(false)
+    setIsLoading(true)
     let plotly: typeof import('plotly.js') | null = null
     const data = activeGraph.data.map((trace, index) => toPlotlyTrace(trace, index))
     const textColor = theme === 'dark' ? '#e4eee8' : '#23322d'
@@ -46,7 +52,7 @@ export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
         automargin: true,
         gridcolor: gridColor,
         zeroline: false,
-        ...(activeGraph.kind === 'survival'
+        ...(activeGraph.kind === 'survival' || activeGraph.kind === 'ocCurve'
           ? { range: [0, 1], tickformat: '.0%' }
           : activeGraph.kind === 'autocorrelation'
             ? { range: [-1, 1], zeroline: true }
@@ -77,12 +83,23 @@ export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
         }
         return loadedPlotly
           .react(element, data, layout, { responsive: true, displaylogo: false })
+          .then(() => {
+            if (!active) return
+            setIsLoading(false)
+            onRenderedRef.current?.(element)
+          })
           .catch(() => {
-            if (active) setLoadError(true)
+            if (active) {
+              setLoadError(true)
+              setIsLoading(false)
+            }
           })
       })
       .catch(() => {
-        if (active) setLoadError(true)
+        if (active) {
+          setLoadError(true)
+          setIsLoading(false)
+        }
       })
 
     return () => {
@@ -97,9 +114,10 @@ export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
         <div>
           <h4>{graph.title}</h4>
           <p>
-            {isSwedish
-              ? `${graph.sampleCount} kompletta observationer`
-              : `${graph.sampleCount} complete observations`}
+            {graph.sampleLabel ??
+              (isSwedish
+                ? `${graph.sampleCount} kompletta observationer`
+                : `${graph.sampleCount} complete observations`)}
           </p>
         </div>
       </header>
@@ -111,6 +129,11 @@ export function GraphPlot({ graph, language, theme }: GraphPlotProps) {
           isSwedish ? `${graph.title}, interaktivt diagram` : `${graph.title}, interactive chart`
         }
       />
+      {isLoading && !loadError && (
+        <p className="graph-loading" role="status">
+          {isSwedish ? 'Laddar diagram…' : 'Loading chart…'}
+        </p>
+      )}
       {loadError && (
         <p className="session-caption" role="alert">
           {isSwedish ? 'Diagrammet kunde inte laddas.' : 'The chart could not be loaded.'}

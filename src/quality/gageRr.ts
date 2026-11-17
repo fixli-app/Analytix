@@ -55,6 +55,22 @@ export interface GageRrResult {
   numberOfDistinctCategories: number
 }
 
+export interface DestructiveGageRrInput {
+  batches: readonly (string | null | undefined)[]
+  operators: readonly (string | null | undefined)[]
+  specimenIds: readonly (string | null | undefined)[]
+  measurements: readonly (number | null | undefined)[]
+  tolerance?: number | null
+}
+
+export interface DestructiveGageRrResult {
+  batchCount: number
+  operatorCount: number
+  specimensPerCell: number
+  specimenCount: number
+  analysis: GageRrResult
+}
+
 interface Cell {
   part: string
   operator: string
@@ -270,6 +286,40 @@ export function crossedGageRr(input: GageRrInput): GageRrResult {
       gageRrComponent <= 0
         ? Number.POSITIVE_INFINITY
         : Math.floor(1.41 * Math.sqrt(partComponent / gageRrComponent)),
+  }
+}
+
+export function destructiveGageRr(input: DestructiveGageRrInput): DestructiveGageRrResult {
+  const { batches, operators, specimenIds, measurements, tolerance = null } = input
+  if (
+    batches.length !== operators.length ||
+    batches.length !== specimenIds.length ||
+    batches.length !== measurements.length
+  ) {
+    throw new Error('Batch, operatör, prov-ID och mätkolumn måste ha samma antal rader.')
+  }
+  const normalizedSpecimenIds = specimenIds.map((id) => id?.trim() ?? '')
+  if (normalizedSpecimenIds.some((id) => !id)) {
+    throw new Error('Varje destruktivt prov måste ha ett unikt, ifyllt prov-ID.')
+  }
+  if (new Set(normalizedSpecimenIds).size !== normalizedSpecimenIds.length) {
+    throw new Error('Varje destruktivt prov-ID får förekomma exakt en gång.')
+  }
+
+  const normalizedBatches = batches.map((batch) => batch?.trim() || null)
+  const normalizedOperators = operators.map((operator) => operator?.trim() || null)
+  const analysis = crossedGageRr({
+    parts: normalizedBatches,
+    operators: normalizedOperators,
+    measurements,
+    tolerance,
+  })
+  return {
+    batchCount: analysis.partCount,
+    operatorCount: analysis.operatorCount,
+    specimensPerCell: analysis.replicatesPerCell,
+    specimenCount: analysis.measurementCount,
+    analysis,
   }
 }
 

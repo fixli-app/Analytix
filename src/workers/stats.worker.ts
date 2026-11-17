@@ -22,7 +22,8 @@ import { twoSamplePoissonRate } from '../stats/twoSamplePoissonRate'
 import { normalProcessCapability } from '../stats/processCapability'
 import { imrControlChart } from '../stats/imrControlChart'
 import { buildGraph } from '../charts/graphData'
-import { crossedGageRr } from '../quality/gageRr'
+import { crossedGageRr, destructiveGageRr } from '../quality/gageRr'
+import { expandedGageRr } from '../quality/expandedGageRr'
 import { subgroupControlChart } from '../quality/subgroupControlChart'
 import { normalAndersonDarling } from '../stats/normalAndersonDarling'
 import { poissonGoodnessOfFit } from '../stats/poissonGoodnessOfFit'
@@ -45,6 +46,19 @@ import { kaplanMeier } from '../stats/survival'
 import { parametricSurvival } from '../stats/parametricSurvival'
 import { analyzeTimeSeries } from '../stats/timeSeries'
 import { powerAndSampleSize } from '../stats/power'
+import {
+  gageLinearityAndBias,
+  gageRunChart,
+  nestedGageRr,
+  type1GageStudy,
+} from '../quality/gageStudy'
+import {
+  attributeControlChart,
+  cusumControlChart,
+  ewmaControlChart,
+  zMrControlChart,
+} from '../quality/advancedControlCharts'
+import { analyzeAttributeAgreement } from '../quality/attributeAgreement'
 
 const api = {
   describe,
@@ -69,6 +83,8 @@ const api = {
   imrControlChart,
   buildGraph,
   crossedGageRr,
+  destructiveGageRr,
+  expandedGageRr,
   subgroupControlChart,
   normalAndersonDarling,
   poissonGoodnessOfFit,
@@ -90,6 +106,15 @@ const api = {
   parametricSurvival,
   analyzeTimeSeries,
   powerAndSampleSize,
+  type1GageStudy,
+  gageLinearityAndBias,
+  gageRunChart,
+  nestedGageRr,
+  attributeControlChart,
+  cusumControlChart,
+  ewmaControlChart,
+  zMrControlChart,
+  analyzeAttributeAgreement,
 }
 
 export type StatsWorker = typeof api

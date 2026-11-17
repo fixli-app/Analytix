@@ -3,14 +3,26 @@ export interface ControlChartPoint {
   value: number
 }
 
+export type ImrRuleSet = 'basic' | 'nelson'
+
 export interface ControlChartSignal {
   chart: 'I' | 'MR'
-  rule: 'beyond-limit' | 'eight-on-one-side'
+  rule:
+    | 'beyond-limit'
+    | 'eight-on-one-side'
+    | 'nelson-rule-2'
+    | 'nelson-rule-3'
+    | 'nelson-rule-4'
+    | 'nelson-rule-5'
+    | 'nelson-rule-6'
+    | 'nelson-rule-7'
+    | 'nelson-rule-8'
   observations: number[]
 }
 
 export interface ImrControlChartResult {
   count: number
+  ruleSet: ImrRuleSet
   mean: number
   averageMovingRange: number
   withinStandardDeviation: number
@@ -34,6 +46,7 @@ const movingRangeD4 = 3.267
 
 export function imrControlChart(
   values: readonly (number | null | undefined)[],
+  ruleSet: ImrRuleSet = 'basic',
 ): ImrControlChartResult {
   const observations: ControlChartPoint[] = []
   values.forEach((value, index) => {
@@ -81,6 +94,7 @@ export function imrControlChart(
 
   return {
     count: observations.length,
+    ruleSet,
     mean,
     averageMovingRange,
     withinStandardDeviation,
@@ -99,7 +113,9 @@ export function imrControlChart(
         movingRange.lowerControlLimit,
         movingRange.upperControlLimit,
       ),
-      ...findEightOnOneSideSignals(individuals.points, mean),
+      ...(ruleSet === 'basic'
+        ? findEightOnOneSideSignals(individuals.points, mean)
+        : findNelsonRuleSignals(individuals.points, mean, withinStandardDeviation)),
     ],
   }
 }
@@ -153,4 +169,84 @@ function findEightOnOneSideSignals(
     }
   })
   return signals
+}
+
+export function findNelsonRuleSignals(
+  points: readonly ControlChartPoint[],
+  centerLine: number,
+  sigma: number,
+): ControlChartSignal[] {
+  if (!Number.isFinite(sigma) || sigma <= 0) return []
+  const signals: ControlChartSignal[] = []
+  const appendWindows = (
+    segment: readonly ControlChartPoint[],
+    rule: Extract<ControlChartSignal['rule'], `nelson-rule-${number}`>,
+    width: number,
+    isSignalWindow: (window: readonly ControlChartPoint[]) => boolean,
+  ) => {
+    let activeSignal = false
+    for (let start = 0; start + width <= segment.length; start += 1) {
+      const window = segment.slice(start, start + width)
+      const matches = isSignalWindow(window)
+      if (matches && !activeSignal) {
+        signals.push({ chart: 'I', rule, observations: window.map((point) => point.observation) })
+      }
+      activeSignal = matches
+    }
+  }
+
+  continuousSegments(points).forEach((segment) => {
+    appendWindows(segment, 'nelson-rule-2', 9, (window) => {
+      const above = window.every((point) => point.value > centerLine)
+      const below = window.every((point) => point.value < centerLine)
+      return above || below
+    })
+    appendWindows(segment, 'nelson-rule-3', 6, (window) => {
+      const differences = window.slice(1).map((point, index) => point.value - window[index].value)
+      return (
+        differences.every((difference) => difference > 0) ||
+        differences.every((difference) => difference < 0)
+      )
+    })
+    appendWindows(segment, 'nelson-rule-4', 14, (window) => {
+      const directions = window
+        .slice(1)
+        .map((point, index) => Math.sign(point.value - window[index].value))
+      return directions.every(
+        (direction, index) =>
+          direction !== 0 && (index === 0 || direction === -directions[index - 1]),
+      )
+    })
+    appendWindows(segment, 'nelson-rule-5', 3, (window) => {
+      const above = window.filter((point) => point.value - centerLine > 2 * sigma).length
+      const below = window.filter((point) => centerLine - point.value > 2 * sigma).length
+      return above >= 2 || below >= 2
+    })
+    appendWindows(segment, 'nelson-rule-6', 5, (window) => {
+      const above = window.filter((point) => point.value - centerLine > sigma).length
+      const below = window.filter((point) => centerLine - point.value > sigma).length
+      return above >= 4 || below >= 4
+    })
+    appendWindows(segment, 'nelson-rule-7', 15, (window) =>
+      window.every((point) => Math.abs(point.value - centerLine) < sigma),
+    )
+    appendWindows(segment, 'nelson-rule-8', 8, (window) =>
+      window.every((point) => Math.abs(point.value - centerLine) > sigma),
+    )
+  })
+  return signals
+}
+
+function continuousSegments(points: readonly ControlChartPoint[]): ControlChartPoint[][] {
+  const segments: ControlChartPoint[][] = []
+  let segment: ControlChartPoint[] = []
+  points.forEach((point) => {
+    if (segment.length > 0 && point.observation !== segment[segment.length - 1].observation + 1) {
+      segments.push(segment)
+      segment = []
+    }
+    segment.push(point)
+  })
+  if (segment.length > 0) segments.push(segment)
+  return segments
 }

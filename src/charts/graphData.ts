@@ -11,7 +11,7 @@ export type GraphBuilderKind =
   | 'normalQQ'
   | 'timeSeries'
 
-export type GraphKind = GraphBuilderKind | 'survival' | 'autocorrelation' | 'powerCurve'
+export type GraphKind = GraphBuilderKind | 'survival' | 'autocorrelation' | 'powerCurve' | 'ocCurve'
 
 export interface GraphTrace {
   type: 'histogram' | 'box' | 'scatter' | 'bar'
@@ -35,6 +35,7 @@ export interface GraphModel {
   xTitle: string
   yTitle: string
   sampleCount: number
+  sampleLabel?: string
   data: GraphTrace[]
   cumulativeAxis: boolean
 }
@@ -44,6 +45,7 @@ export interface GraphInput {
   values?: readonly (number | null | undefined)[]
   xValues?: readonly (number | null | undefined)[]
   categories?: readonly (string | null | undefined)[]
+  categoryCounts?: readonly { category: string; count: number }[]
   language: string
 }
 
@@ -123,8 +125,11 @@ export function buildGraph(input: GraphInput): GraphModel {
     case 'bar':
     case 'pareto': {
       const validCategories = categorical.filter(isCategory)
-      const counts = countCategories(validCategories)
-      if (counts.length === 0)
+      const counts = input.categoryCounts
+        ? aggregateCategoryCounts(input.categoryCounts)
+        : countCategories(validCategories)
+      const total = counts.reduce((sum, item) => sum + item.count, 0)
+      if (counts.length === 0 || total === 0)
         throw new Error('Minst en kategorisk observation krävs för diagrammet.')
       const ordered =
         input.kind === 'pareto'
@@ -151,12 +156,12 @@ export function buildGraph(input: GraphInput): GraphModel {
           x: labels,
           y: frequencies.map((frequency) => {
             cumulative += frequency
-            return (100 * cumulative) / validCategories.length
+            return (100 * cumulative) / total
           }),
           yAxis: 'y2',
         })
       }
-      return model(input.kind, isSwedish, validCategories.length, data)
+      return model(input.kind, isSwedish, total, data)
     }
     case 'ecdf': {
       requireNumeric(numeric)
@@ -344,6 +349,22 @@ function countCategories(categories: readonly (string | null | undefined)[]) {
   categories.forEach((category) => {
     if (!isPresent(category) || category === '') return
     counts.set(category, (counts.get(category) ?? 0) + 1)
+  })
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+function aggregateCategoryCounts(entries: readonly { category: string; count: number }[]) {
+  const counts = new Map<string, number>()
+  entries.forEach(({ category, count }) => {
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error('Paretofrekvenser måste vara icke-negativa heltal.')
+    }
+    if (count === 0) return
+    const name = category.trim()
+    if (!name) throw new Error('Varje positiv Paretofrekvens måste ha en kategori.')
+    counts.set(name, (counts.get(name) ?? 0) + count)
   })
   return [...counts.entries()]
     .map(([name, count]) => ({ name, count }))

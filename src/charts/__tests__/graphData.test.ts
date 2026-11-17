@@ -62,6 +62,40 @@ describe('buildGraph', () => {
     expect(pareto.cumulativeAxis).toBe(true)
   })
 
+  it('builds a Pareto chart directly from aggregated check-sheet counts', () => {
+    const pareto = buildGraph({
+      kind: 'pareto',
+      categoryCounts: [
+        { category: 'A', count: 2 },
+        { category: 'B', count: 4 },
+        { category: 'A', count: 1 },
+        { category: 'Ignored', count: 0 },
+      ],
+      language: 'en',
+    })
+
+    expect(pareto.sampleCount).toBe(7)
+    expect(pareto.data[0]).toMatchObject({ x: ['B', 'A'], y: [4, 3] })
+    expect(pareto.data[1]).toMatchObject({ x: ['B', 'A'], y: [57.142857142857146, 100] })
+  })
+
+  it('rejects invalid aggregated Pareto counts and unlabeled positive counts', () => {
+    expect(() =>
+      buildGraph({
+        kind: 'pareto',
+        categoryCounts: [{ category: 'A', count: 1.5 }],
+        language: 'sv',
+      }),
+    ).toThrow('Paretofrekvenser måste vara icke-negativa heltal.')
+    expect(() =>
+      buildGraph({
+        kind: 'pareto',
+        categoryCounts: [{ category: ' ', count: 1 }],
+        language: 'sv',
+      }),
+    ).toThrow('Varje positiv Paretofrekvens måste ha en kategori.')
+  })
+
   it('builds ordered ECDF and time series points', () => {
     const ecdf = buildGraph({ kind: 'ecdf', values: [3, 1, 2], language: 'en' })
     const timeSeries = buildGraph({ kind: 'timeSeries', values: [4, null, 8], language: 'en' })

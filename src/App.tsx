@@ -23,6 +23,7 @@ import {
   Download,
   Grid2X2,
   Languages,
+  LayoutDashboard,
   Moon,
   MoreHorizontal,
   Pencil,
@@ -71,11 +72,24 @@ import type { ChiSquareGoodnessOfFitResult } from './stats/chiSquareGoodnessOfFi
 import type { CategoryProbability } from './stats/chiSquareGoodnessOfFit'
 import type { FisherExactResult } from './stats/fisherExact'
 import type { ProcessCapabilityResult } from './stats/processCapability'
-import type { ImrControlChartResult } from './stats/imrControlChart'
-import type { GraphModel } from './charts/graphData'
+import type { ControlChartSignal, ImrControlChartResult, ImrRuleSet } from './stats/imrControlChart'
+import type { GraphModel, GraphTrace } from './charts/graphData'
 import { powerCurveGraph, survivalGraph, timeSeriesGraph } from './charts/analysisGraphs'
 import type { GageRrResult } from './quality/gageRr'
+import type { ExpandedGageRrResult } from './quality/expandedGageRr'
+import type {
+  GageLinearityResult,
+  GageRunChartResult,
+  NestedGageRrResult,
+  Type1GageResult,
+} from './quality/gageStudy'
 import type { SubgroupChartKind, SubgroupControlChartResult } from './quality/subgroupControlChart'
+import type {
+  AdvancedControlChartResult,
+  AttributeControlChartKind,
+  ZMrControlChartResult,
+} from './quality/advancedControlCharts'
+import type { AttributeAgreementResult } from './quality/attributeAgreement'
 import type { TwoSampleZResult } from './stats/twoSampleZ'
 import type { TwoSamplePoissonRateResult } from './stats/twoSamplePoissonRate'
 import type { VarianceComparisonResult } from './stats/compareVariances'
@@ -117,9 +131,24 @@ import { ImrControlChartDialog } from './dialogs/ImrControlChartDialog'
 import { ImrControlCharts } from './charts/ImrControlCharts'
 import { GraphPlot } from './charts/GraphPlot'
 import { GraphDialog, type GraphSelection } from './dialogs/GraphDialog'
+import {
+  DashboardDialog,
+  type DashboardBlock,
+  type DashboardGraphSource,
+} from './dialogs/DashboardDialog'
 import { QualityStudioDialog } from './dialogs/QualityStudioDialog'
-import { GageRrDialog } from './dialogs/GageRrDialog'
+import { AcceptanceSamplingDialog } from './dialogs/AcceptanceSamplingDialog'
+import { GageRrDialog, type GageRrRequest } from './dialogs/GageRrDialog'
+import { GageStudyDialog, type GageStudyRequest } from './dialogs/GageStudyDialog'
 import { SubgroupControlChartDialog } from './dialogs/SubgroupControlChartDialog'
+import {
+  AdvancedControlChartDialog,
+  type AdvancedControlChartRequest,
+} from './dialogs/AdvancedControlChartDialog'
+import {
+  AttributeAgreementDialog,
+  type AttributeAgreementRequest,
+} from './dialogs/AttributeAgreementDialog'
 import { SubgroupControlCharts } from './charts/SubgroupControlCharts'
 import { TwoSampleZDialog } from './dialogs/TwoSampleZDialog'
 import { TwoSamplePoissonRateDialog } from './dialogs/TwoSamplePoissonRateDialog'
@@ -189,8 +218,16 @@ const menuContent: Record<string, string[]> = {
     'fisherExact',
     'processCapability',
   ],
-  graphs: ['imrControlChart', 'chartBuilder'],
-  quality: ['qualityStudio', 'gageRr', 'subgroupControlChart'],
+  graphs: ['imrControlChart', 'chartBuilder', 'dashboard'],
+  quality: [
+    'qualityStudio',
+    'acceptanceSampling',
+    'gageRr',
+    'gageStudy',
+    'attributeAgreement',
+    'subgroupControlChart',
+    'advancedControlCharts',
+  ],
   editor: ['flowchartEditor'],
   tools: ['settings'],
   window: ['worksheetWindow', 'sessionWindow'],
@@ -251,9 +288,14 @@ const actionLabelKeys: Record<string, string> = {
   processCapability: 'processCapability',
   imrControlChart: 'imrControlChart',
   chartBuilder: 'chartBuilder',
+  dashboard: 'dashboard',
   qualityStudio: 'qualityStudio',
+  acceptanceSampling: 'acceptanceSampling',
   gageRr: 'gageRr',
+  gageStudy: 'gageStudy',
+  attributeAgreement: 'attributeAgreement',
   subgroupControlChart: 'subgroupControlChart',
+  advancedControlCharts: 'advancedControlCharts',
 }
 
 interface SessionResult {
@@ -271,8 +313,17 @@ interface SessionResult {
   processCapability?: ProcessCapabilityResult
   imrControlChart?: ImrControlChartResult
   graph?: GraphModel
+  additionalGraphs?: GraphModel[]
   gageRr?: GageRrResult
+  gageRrDesign?: 'crossed' | 'destructive'
+  expandedGageRr?: ExpandedGageRrResult
+  type1Gage?: Type1GageResult
+  gageLinearity?: GageLinearityResult
+  gageRunChart?: GageRunChartResult
+  nestedGageRr?: NestedGageRrResult
   subgroupControlChart?: SubgroupControlChartResult
+  advancedControlChart?: AdvancedControlChartResult
+  attributeAgreement?: AttributeAgreementResult
   twoSampleZ?: TwoSampleZResult
   twoSampleT?: TwoSampleTResult
   pairedT?: PairedTResult
@@ -305,6 +356,216 @@ interface AppCommand {
   disabled: boolean
 }
 
+function graphsForSession(result: SessionResult, language: string): GraphModel[] {
+  const isSwedish = language === 'sv'
+  const graphs = [
+    result.graph,
+    ...(result.additionalGraphs ?? []),
+    result.powerGraph,
+    result.survivalGraph,
+    result.timeSeriesGraph,
+  ].filter((graph): graph is GraphModel => graph !== undefined)
+  const trace = (
+    name: string,
+    x: (number | string)[],
+    y: number[],
+    lineDash?: GraphTrace['lineDash'],
+  ): GraphTrace => ({ type: 'scatter', mode: 'lines', name, x, y, lineDash })
+
+  if (result.imrControlChart) {
+    const imr = result.imrControlChart
+    const individualX = imr.individuals.points.map((point) => point.observation)
+    const movingRangeX = imr.movingRange.points.map((point) => point.observation)
+    graphs.push(
+      {
+        kind: 'timeSeries',
+        title: isSwedish ? 'Individdiagram' : 'Individuals chart',
+        xTitle: isSwedish ? 'Observation' : 'Observation',
+        yTitle: result.columnName,
+        sampleCount: imr.individuals.points.length,
+        cumulativeAxis: false,
+        data: [
+          {
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: isSwedish ? 'Individer' : 'Individuals',
+            x: individualX,
+            y: imr.individuals.points.map((point) => point.value),
+          },
+          trace(
+            'CL',
+            individualX,
+            individualX.map(() => imr.individuals.centerLine),
+          ),
+          trace(
+            'UCL',
+            individualX,
+            individualX.map(() => imr.individuals.upperControlLimit),
+            'dash',
+          ),
+          trace(
+            'LCL',
+            individualX,
+            individualX.map(() => imr.individuals.lowerControlLimit),
+            'dash',
+          ),
+        ],
+      },
+      {
+        kind: 'timeSeries',
+        title: 'MR chart',
+        xTitle: isSwedish ? 'Observation' : 'Observation',
+        yTitle: isSwedish ? 'Rörlig variationsbredd' : 'Moving range',
+        sampleCount: imr.movingRange.points.length,
+        cumulativeAxis: false,
+        data: [
+          {
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'MR',
+            x: movingRangeX,
+            y: imr.movingRange.points.map((point) => point.value),
+          },
+          trace(
+            'CL',
+            movingRangeX,
+            movingRangeX.map(() => imr.movingRange.centerLine),
+          ),
+          trace(
+            'UCL',
+            movingRangeX,
+            movingRangeX.map(() => imr.movingRange.upperControlLimit),
+            'dash',
+          ),
+          trace(
+            'LCL',
+            movingRangeX,
+            movingRangeX.map(() => imr.movingRange.lowerControlLimit),
+            'dash',
+          ),
+        ],
+      },
+    )
+  }
+
+  if (result.subgroupControlChart) {
+    const chart = result.subgroupControlChart
+    const xbarX = chart.xbar.points.map((point) => point.index)
+    const variabilityX = chart.variability.points.map((point) => point.index)
+    const makeChart = (
+      title: string,
+      yTitle: string,
+      values: number[],
+      x: number[],
+      lower: number,
+      center: number,
+      upper: number,
+    ): GraphModel => ({
+      kind: 'timeSeries',
+      title,
+      xTitle: isSwedish ? 'Subgrupp' : 'Subgroup',
+      yTitle,
+      sampleCount: x.length,
+      cumulativeAxis: false,
+      data: [
+        { type: 'scatter', mode: 'lines+markers', name: title, x, y: values },
+        trace(
+          'CL',
+          x,
+          x.map(() => center),
+        ),
+        trace(
+          'UCL',
+          x,
+          x.map(() => upper),
+          'dash',
+        ),
+        trace(
+          'LCL',
+          x,
+          x.map(() => lower),
+          'dash',
+        ),
+      ],
+    })
+    graphs.push(
+      makeChart(
+        'Xbar chart',
+        isSwedish ? 'Gruppmedelvärde' : 'Subgroup mean',
+        chart.xbar.points.map((point) => point.value),
+        xbarX,
+        chart.xbar.lowerControlLimit,
+        chart.xbar.centerLine,
+        chart.xbar.upperControlLimit,
+      ),
+      makeChart(
+        `${chart.variabilityChart.toUpperCase()} chart`,
+        chart.variabilityChart.toUpperCase(),
+        chart.variability.points.map((point) => point.value),
+        variabilityX,
+        chart.variability.lowerControlLimit,
+        chart.variability.centerLine,
+        chart.variability.upperControlLimit,
+      ),
+    )
+  }
+
+  if (result.gageLinearity) {
+    const linearity = result.gageLinearity
+    graphs.push({
+      kind: 'timeSeries',
+      title: 'Bias / Linearity',
+      xTitle: isSwedish ? 'Referensvärde' : 'Reference value',
+      yTitle: isSwedish ? 'Bias' : 'Bias',
+      sampleCount: linearity.count,
+      cumulativeAxis: false,
+      data: [
+        {
+          type: 'scatter',
+          mode: 'markers',
+          name: isSwedish ? 'Observerad bias' : 'Observed bias',
+          x: linearity.points.map((point) => point.reference),
+          y: linearity.points.map((point) => point.bias),
+        },
+        trace(
+          isSwedish ? 'Anpassad bias' : 'Fitted bias',
+          [linearity.minimumReference, linearity.maximumReference],
+          [linearity.fittedBiasAtMinimum, linearity.fittedBiasAtMaximum],
+        ),
+        trace('Zero', [linearity.minimumReference, linearity.maximumReference], [0, 0], 'dash'),
+      ],
+    })
+  }
+
+  return graphs.filter(
+    (graph, index) => graphs.findIndex((candidate) => candidate === graph) === index,
+  )
+}
+
+interface SessionHistoryEntry {
+  id: string
+  result: SessionResult
+}
+
+const dashboardStorageKey = 'statlab-dashboard-blocks'
+
+function loadDashboardBlocks(): DashboardBlock[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(dashboardStorageKey) ?? '[]')
+    if (!Array.isArray(saved)) return []
+    return saved.filter(
+      (block): block is DashboardBlock =>
+        Boolean(block) &&
+        typeof block === 'object' &&
+        'id' in block &&
+        'kind' in block &&
+        (block.kind === 'text' || block.kind === 'chart'),
+    )
+  } catch {
+    return []
+  }
+}
+
 function formatValue(value: number): string {
   return new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 3 }).format(value)
 }
@@ -314,6 +575,270 @@ function formatPValue(value: number, language: string): string {
   return new Intl.NumberFormat(language === 'sv' ? 'sv-SE' : 'en-US', {
     maximumFractionDigits: 3,
   }).format(value)
+}
+
+function imrSignalDescription(rule: ControlChartSignal['rule'], language: string): string {
+  const isSwedish = language === 'sv'
+  const descriptions: Record<ControlChartSignal['rule'], [string, string]> = {
+    'beyond-limit': ['utanför styrgräns', 'beyond control limit'],
+    'eight-on-one-side': ['åtta i rad på samma sida', 'eight consecutive on one side'],
+    'nelson-rule-2': ['9 i rad på samma sida', '9 consecutive on one side'],
+    'nelson-rule-3': ['6 i rad stigande eller fallande', '6 consecutive increasing or decreasing'],
+    'nelson-rule-4': ['14 i rad alternerar', '14 consecutive alternating'],
+    'nelson-rule-5': ['2 av 3 över 2σ på samma sida', '2 of 3 beyond 2σ on the same side'],
+    'nelson-rule-6': ['4 av 5 över 1σ på samma sida', '4 of 5 beyond 1σ on the same side'],
+    'nelson-rule-7': ['15 i rad inom 1σ', '15 consecutive within 1σ'],
+    'nelson-rule-8': ['8 i rad utanför 1σ på båda sidor', '8 consecutive beyond 1σ on either side'],
+  }
+  return descriptions[rule][isSwedish ? 0 : 1]
+}
+
+function advancedControlChartGraph(
+  analysis: AdvancedControlChartResult,
+  language: string,
+): GraphModel {
+  const isSwedish = language === 'sv'
+  const points = analysis.result.points
+  const observations = points.map((point) => point.observation)
+  const trace = (
+    name: string,
+    x: number[],
+    y: number[],
+    color?: string,
+    lineDash?: GraphTrace['lineDash'],
+  ): GraphTrace => ({ type: 'scatter', mode: 'lines', name, x, y, color, lineDash })
+
+  if (analysis.kind === 'attribute') {
+    const labels: Record<AttributeControlChartKind, [string, string]> = {
+      p: ['P-diagram', 'P chart'],
+      pPrime: ['P′-diagram (Laney)', 'P′ chart (Laney)'],
+      np: ['NP-diagram', 'NP chart'],
+      c: ['C-diagram', 'C chart'],
+      u: ['U-diagram', 'U chart'],
+      uPrime: ['U′-diagram (Laney)', 'U′ chart (Laney)'],
+    }
+    const label = labels[analysis.result.kind][isSwedish ? 0 : 1]
+    return {
+      stableKey: analysis.result,
+      kind: 'timeSeries',
+      title: label,
+      xTitle: isSwedish ? 'Subgrupp' : 'Subgroup',
+      yTitle: label,
+      sampleCount: analysis.result.count,
+      cumulativeAxis: false,
+      data: [
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: label,
+          x: observations,
+          y: points.map((point) => point.value),
+          color: '#2f7861',
+        },
+        trace(
+          isSwedish ? 'Centrumlinje' : 'Center line',
+          observations,
+          points.map((point) => point.centerLine),
+          '#e16d4c',
+        ),
+        trace(
+          'UCL',
+          observations,
+          points.map((point) => point.upperControlLimit),
+          '#8b6555',
+          'dash',
+        ),
+        trace(
+          'LCL',
+          observations,
+          points.map((point) => point.lowerControlLimit),
+          '#8b6555',
+          'dash',
+        ),
+      ],
+    }
+  }
+
+  if (analysis.kind === 'cusum') {
+    return {
+      stableKey: analysis.result,
+      kind: 'timeSeries',
+      title: 'CUSUM',
+      xTitle: isSwedish ? 'Observation' : 'Observation',
+      yTitle: 'CUSUM',
+      sampleCount: analysis.result.count,
+      cumulativeAxis: false,
+      data: [
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: isSwedish ? 'Övre CUSUM' : 'Upper CUSUM',
+          x: observations,
+          y: points.map((point) => point.positiveCusum),
+          color: '#e16d4c',
+        },
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: isSwedish ? 'Nedre CUSUM' : 'Lower CUSUM',
+          x: observations,
+          y: points.map((point) => point.negativeCusum),
+          color: '#2f7861',
+        },
+        trace(
+          'UCL',
+          observations,
+          points.map((point) => point.upperControlLimit),
+          '#8b6555',
+          'dash',
+        ),
+        trace(
+          'LCL',
+          observations,
+          points.map((point) => point.lowerControlLimit),
+          '#8b6555',
+          'dash',
+        ),
+      ],
+    }
+  }
+
+  if (analysis.kind === 'zmr') {
+    return {
+      stableKey: analysis.result,
+      kind: 'timeSeries',
+      title: 'Z chart',
+      xTitle: isSwedish ? 'Observation' : 'Observation',
+      yTitle: 'Z',
+      sampleCount: analysis.result.count,
+      cumulativeAxis: false,
+      data: [
+        {
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'Z',
+          x: observations,
+          y: points.map((point) => point.value),
+          color: '#2f7861',
+        },
+        trace(
+          'CL',
+          observations,
+          points.map((point) => point.centerLine),
+          '#e16d4c',
+        ),
+        trace(
+          'UCL',
+          observations,
+          points.map((point) => point.upperControlLimit),
+          '#8b6555',
+          'dash',
+        ),
+        trace(
+          'LCL',
+          observations,
+          points.map((point) => point.lowerControlLimit),
+          '#8b6555',
+          'dash',
+        ),
+      ],
+    }
+  }
+
+  return {
+    stableKey: analysis.result,
+    kind: 'timeSeries',
+    title: 'EWMA',
+    xTitle: isSwedish ? 'Observation' : 'Observation',
+    yTitle: isSwedish ? 'EWMA' : 'EWMA',
+    sampleCount: analysis.result.count,
+    cumulativeAxis: false,
+    data: [
+      {
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'EWMA',
+        x: observations,
+        y: points.map((point) => point.value),
+        color: '#2f7861',
+      },
+      trace(
+        'CL',
+        observations,
+        points.map((point) => point.centerLine),
+        '#e16d4c',
+      ),
+      trace(
+        'UCL',
+        observations,
+        points.map((point) => point.upperControlLimit),
+        '#8b6555',
+        'dash',
+      ),
+      trace(
+        'LCL',
+        observations,
+        points.map((point) => point.lowerControlLimit),
+        '#8b6555',
+        'dash',
+      ),
+    ],
+  }
+}
+
+function zMrMovingRangeGraph(result: ZMrControlChartResult, language: string): GraphModel {
+  const isSwedish = language === 'sv'
+  const observations = result.movingRanges.map((point) => point.observation)
+  const line = (
+    name: string,
+    values: number[],
+    color: string,
+    lineDash?: GraphTrace['lineDash'],
+  ): GraphTrace => ({
+    type: 'scatter',
+    mode: 'lines',
+    name,
+    x: observations,
+    y: values,
+    color,
+    lineDash,
+  })
+  return {
+    stableKey: result,
+    kind: 'timeSeries',
+    title: 'MR-Z chart',
+    xTitle: isSwedish ? 'Observation' : 'Observation',
+    yTitle: isSwedish ? 'MR för Z' : 'MR of Z',
+    sampleCount: result.movingRanges.length,
+    cumulativeAxis: false,
+    data: [
+      {
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: isSwedish ? 'MR för Z' : 'MR of Z',
+        x: observations,
+        y: result.movingRanges.map((point) => point.value),
+        color: '#2f7861',
+      },
+      line(
+        'CL',
+        result.movingRanges.map((point) => point.centerLine),
+        '#e16d4c',
+      ),
+      line(
+        'UCL',
+        result.movingRanges.map((point) => point.upperControlLimit),
+        '#8b6555',
+        'dash',
+      ),
+      line(
+        'LCL',
+        result.movingRanges.map((point) => point.lowerControlLimit),
+        '#8b6555',
+        'dash',
+      ),
+    ],
+  }
 }
 
 function powerTestLabel(test: PowerTest, language: string): string {
@@ -335,7 +860,13 @@ function powerUsesTwoGroups(test: PowerTest): boolean {
 function gageAnovaLabel(
   source: GageRrResult['anova'][number]['source'],
   isSwedish: boolean,
+  design?: 'crossed' | 'destructive',
 ): string {
+  if (design === 'destructive') {
+    if (source === 'part') return isSwedish ? 'Batch' : 'Batch'
+    if (source === 'partOperator') return isSwedish ? 'Batch × operatör' : 'Batch × operator'
+    if (source === 'repeatability') return isSwedish ? 'Inom-cell-residual' : 'Within-cell residual'
+  }
   const labels = {
     part: ['Del', 'Part'],
     operator: ['Operatör', 'Operator'],
@@ -348,7 +879,14 @@ function gageAnovaLabel(
 function gageComponentLabel(
   component: keyof GageRrResult['varianceComponents'],
   isSwedish: boolean,
+  design?: 'crossed' | 'destructive',
 ): string {
+  if (design === 'destructive') {
+    if (component === 'repeatability')
+      return isSwedish ? 'Inom-cell-residual' : 'Within-cell residual'
+    if (component === 'partOperator') return isSwedish ? 'Batch × operatör' : 'Batch × operator'
+    if (component === 'partToPart') return isSwedish ? 'Mellan batcher' : 'Between batches'
+  }
   const labels: Record<keyof GageRrResult['varianceComponents'], [string, string]> = {
     repeatability: ['Upprepbarhet', 'Repeatability'],
     operator: ['Operatör', 'Operator'],
@@ -579,7 +1117,11 @@ function App() {
   const [worksheetNameDraft, setWorksheetNameDraft] = useState('')
   const [pendingDeleteWorksheetId, setPendingDeleteWorksheetId] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending')
-  const [session, setSession] = useState<SessionResult | null>(null)
+  const [session, setSessionState] = useState<SessionResult | null>(null)
+  const [sessionHistory, setSessionHistory] = useState<SessionHistoryEntry[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [dashboardBlocks, setDashboardBlocks] = useState<DashboardBlock[]>(loadDashboardBlocks)
   const [oneSampleTDialogOpen, setOneSampleTDialogOpen] = useState(false)
   const [oneSampleZDialogOpen, setOneSampleZDialogOpen] = useState(false)
   const [normalKSDialogOpen, setNormalKSDialogOpen] = useState(false)
@@ -592,8 +1134,12 @@ function App() {
   const [imrControlChartDialogOpen, setImrControlChartDialogOpen] = useState(false)
   const [graphDialogOpen, setGraphDialogOpen] = useState(false)
   const [qualityStudioOpen, setQualityStudioOpen] = useState(false)
+  const [acceptanceSamplingDialogOpen, setAcceptanceSamplingDialogOpen] = useState(false)
   const [gageRrDialogOpen, setGageRrDialogOpen] = useState(false)
+  const [gageStudyDialogOpen, setGageStudyDialogOpen] = useState(false)
   const [subgroupControlChartDialogOpen, setSubgroupControlChartDialogOpen] = useState(false)
+  const [advancedControlChartDialogOpen, setAdvancedControlChartDialogOpen] = useState(false)
+  const [attributeAgreementDialogOpen, setAttributeAgreementDialogOpen] = useState(false)
   const [twoSampleZDialogOpen, setTwoSampleZDialogOpen] = useState(false)
   const [twoSampleTDialogOpen, setTwoSampleTDialogOpen] = useState(false)
   const [pairedTDialogOpen, setPairedTDialogOpen] = useState(false)
@@ -617,7 +1163,7 @@ function App() {
   const [columnFormulaDialogOpen, setColumnFormulaDialogOpen] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const [menuPosition, setMenuPosition] = useState({ top: 98, left: 18 })
+  const [menuPosition, setMenuPosition] = useState({ top: 98, left: 18, maxHeight: 420 })
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   const [commandIndex, setCommandIndex] = useState(0)
@@ -630,6 +1176,107 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  function setSession(next: SessionResult | null) {
+    if (next === null) {
+      setSessionState(null)
+      setSessionHistory([])
+      setActiveSessionId(null)
+      return
+    }
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      result: next,
+    }
+    setSessionState(next)
+    setSessionHistory((current) => [entry, ...current].slice(0, 40))
+    setActiveSessionId(entry.id)
+    const hasVisualResult = Boolean(
+      next.graph ||
+      next.additionalGraphs?.length ||
+      next.powerGraph ||
+      next.survivalGraph ||
+      next.timeSeriesGraph ||
+      next.imrControlChart ||
+      next.subgroupControlChart ||
+      next.gageLinearity ||
+      next.gageRunChart,
+    )
+    const hasPlotlyResult = Boolean(
+      next.graph ||
+      next.additionalGraphs?.length ||
+      next.powerGraph ||
+      next.survivalGraph ||
+      next.timeSeriesGraph ||
+      next.power ||
+      next.survival ||
+      next.timeSeries ||
+      next.gageLinearity,
+    )
+    if (hasVisualResult && !hasPlotlyResult) {
+      window.setTimeout(() => {
+        const panel = document.getElementById('session')
+        if (!panel) return
+        if (window.innerWidth <= 1120) {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        } else {
+          panel.scrollTo({ top: panel.scrollHeight, behavior: 'smooth' })
+        }
+      }, 220)
+    } else if (hasPlotlyResult) {
+      window.setTimeout(() => {
+        const plot = document.querySelector<HTMLDivElement>('#session .session-entry .graph-plot')
+        if (plot) {
+          revealSessionGraph(plot)
+          return
+        }
+        const panel = document.getElementById('session')
+        if (panel && window.innerWidth <= 1120) {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 220)
+    }
+  }
+
+  function revealSessionGraph(plot: HTMLDivElement) {
+    window.setTimeout(() => {
+      const panel = document.getElementById('session')
+      if (!panel || !plot.isConnected) return
+      if (window.innerWidth <= 1120) {
+        plot.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        return
+      }
+      const top =
+        plot.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop
+      panel.scrollTo({ top: Math.max(0, top - 12), behavior: 'smooth' })
+    }, 250)
+  }
+
+  function activateSession(entry: SessionHistoryEntry) {
+    setActiveSessionId(entry.id)
+    setSessionState(entry.result)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const plot = document.querySelector<HTMLDivElement>('#session .session-entry .graph-plot')
+        if (plot) revealSessionGraph(plot)
+      })
+    })
+  }
+
+  function removeSession(entryId: string) {
+    const remaining = sessionHistory.filter((entry) => entry.id !== entryId)
+    setSessionHistory(remaining)
+    if (entryId !== activeSessionId) return
+    const next = remaining[0]
+    setActiveSessionId(next?.id ?? null)
+    setSessionState(next?.result ?? null)
+  }
+
+  function clearSessionHistory() {
+    setSessionHistory([])
+    setActiveSessionId(null)
+    setSessionState(null)
+  }
   const visibleRowIndexes = useMemo(() => filterRowIndexes(rows, filterQuery), [filterQuery, rows])
   const operationWorksheets = useMemo(
     () =>
@@ -659,6 +1306,27 @@ function App() {
         .includes(query),
     )
   }, [commandQuery, commands, language])
+  const dashboardGraphSources = useMemo<DashboardGraphSource[]>(() => {
+    const sources: DashboardGraphSource[] = []
+    sessionHistory.forEach(({ id, result }) => {
+      graphsForSession(result, language).forEach((graph, index) => {
+        sources.push({
+          id: `${id}:${index}`,
+          label: `${result.title} · ${graph.title}`,
+          graph,
+        })
+      })
+    })
+    return sources
+  }, [language, sessionHistory])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(dashboardStorageKey, JSON.stringify(dashboardBlocks))
+    } catch {
+      return
+    }
+  }, [dashboardBlocks])
 
   const virtualizer = useVirtualizer({
     count: visibleRowIndexes.length,
@@ -787,19 +1455,7 @@ function App() {
   const activeColumn = columns[activeCell.column]
   const selectedBounds = selectionBounds(selectionAnchor, activeCell)
   const activeWorksheet = worksheets.find((worksheet) => worksheet.id === activeSheetId)
-  const graphCount = Number(
-    Boolean(
-      session?.graph ||
-      session?.powerGraph ||
-      session?.survivalGraph ||
-      session?.timeSeriesGraph ||
-      session?.timeSeries ||
-      session?.survival ||
-      session?.parametricSurvival ||
-      session?.imrControlChart ||
-      session?.subgroupControlChart,
-    ),
-  )
+  const graphCount = dashboardGraphSources.length
   const analysisDialogKey = `${activeSheetId}:${targetColumn}:${columns
     .map((column) => `${column.id}:${column.type}`)
     .join('|')}`
@@ -808,8 +1464,14 @@ function App() {
       ? t('sheet')
       : worksheet.name
   const isSwedish = language === 'sv'
-  const numericColumns = columns.filter((column) => column.type === 'numeric')
-  const categoryColumns = columns.filter((column) => column.type !== 'numeric')
+  const numericColumns = useMemo(
+    () => columns.filter((column) => column.type === 'numeric'),
+    [columns],
+  )
+  const categoryColumns = useMemo(
+    () => columns.filter((column) => column.type === 'text'),
+    [columns],
+  )
 
   async function runAnalysis(columnId = targetColumn) {
     const column = columns.find((item) => item.id === columnId)
@@ -1239,7 +1901,7 @@ function App() {
     }
   }
 
-  async function runImrControlChartAnalysis(columnId: string) {
+  async function runImrControlChartAnalysis(columnId: string, ruleSet: ImrRuleSet) {
     const column = columns.find((item) => item.id === columnId)
     if (!column || column.type !== 'numeric') {
       setToast('Välj en numerisk kolumn för I-MR-diagrammet.')
@@ -1250,7 +1912,7 @@ function App() {
       return raw ? Number(raw.replace(',', '.')) : null
     })
     try {
-      const result = await statsWorker.imrControlChart(values)
+      const result = await statsWorker.imrControlChart(values, ruleSet)
       setSession({
         title: 'I-MR-styrdiagram',
         columnName: column.name,
@@ -1262,22 +1924,67 @@ function App() {
     }
   }
 
-  async function runGageRrAnalysis(
-    partColumnId: string,
-    operatorColumnId: string,
-    measurementColumnId: string,
-    tolerance: number | null,
-  ) {
-    const partColumn = columns.find((column) => column.id === partColumnId)
-    const operatorColumn = columns.find((column) => column.id === operatorColumnId)
-    const measurementColumn = columns.find((column) => column.id === measurementColumnId)
+  async function runGageRrAnalysis(request: GageRrRequest) {
+    if (request.kind === 'expanded') {
+      const partColumn = columns.find((column) => column.id === request.partColumnId)
+      const operatorColumn = columns.find((column) => column.id === request.operatorColumnId)
+      const conditionColumn = columns.find((column) => column.id === request.conditionColumnId)
+      const measurementColumn = columns.find((column) => column.id === request.measurementColumnId)
+      if (
+        !partColumn ||
+        !operatorColumn ||
+        !conditionColumn ||
+        !measurementColumn ||
+        partColumn.type === 'numeric' ||
+        operatorColumn.type === 'numeric' ||
+        conditionColumn.type === 'numeric' ||
+        measurementColumn.type !== 'numeric' ||
+        new Set([partColumn.id, operatorColumn.id, conditionColumn.id]).size !== 3
+      ) {
+        setToast('Välj tre separata textfaktorer och ett numeriskt mätvärde för Expanded Gage R&R.')
+        return
+      }
+      try {
+        const result = await statsWorker.expandedGageRr({
+          parts: rows.map((row) => row[partColumn.id]?.trim() || null),
+          operators: rows.map((row) => row[operatorColumn.id]?.trim() || null),
+          conditions: rows.map((row) => row[conditionColumn.id]?.trim() || null),
+          measurements: rows.map((row) => {
+            const raw = row[measurementColumn.id]?.trim()
+            return raw ? Number(raw.replace(',', '.')) : null
+          }),
+          tolerance: request.tolerance,
+        })
+        setSession({
+          title: 'Gage R&R (expanded)',
+          columnName: `${measurementColumn.name} · ${partColumn.name} · ${operatorColumn.name} · ${conditionColumn.name}`,
+          expandedGageRr: result,
+          createdAt: new Date(),
+        })
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : 'Expanded Gage R&R kunde inte beräknas.')
+      }
+      return
+    }
+    const batchColumnId =
+      request.kind === 'destructive' ? request.batchColumnId : request.partColumnId
+    const batchColumn = columns.find((column) => column.id === batchColumnId)
+    const operatorColumn = columns.find((column) => column.id === request.operatorColumnId)
+    const specimenColumn =
+      request.kind === 'destructive'
+        ? columns.find((column) => column.id === request.specimenColumnId)
+        : undefined
+    const measurementColumn = columns.find((column) => column.id === request.measurementColumnId)
     if (
-      !partColumn ||
+      !batchColumn ||
       !operatorColumn ||
       !measurementColumn ||
-      measurementColumn.type !== 'numeric'
+      batchColumn.type === 'numeric' ||
+      operatorColumn.type === 'numeric' ||
+      measurementColumn.type !== 'numeric' ||
+      (request.kind === 'destructive' && (!specimenColumn || specimenColumn.type === 'numeric'))
     ) {
-      setToast('Välj del, operatör och numeriskt mätvärde för Gage R&R.')
+      setToast('Välj del/batch, operatör och numeriskt mätvärde för Gage R&R.')
       return
     }
     const measurements = rows.map((row) => {
@@ -1285,20 +1992,223 @@ function App() {
       return raw ? Number(raw.replace(',', '.')) : null
     })
     try {
-      const result = await statsWorker.crossedGageRr({
-        parts: rows.map((row) => row[partColumn.id]?.trim() || null),
-        operators: rows.map((row) => row[operatorColumn.id]?.trim() || null),
-        measurements,
-        tolerance,
-      })
+      let gageRr: GageRrResult
+      if (request.kind === 'destructive') {
+        const result = await statsWorker.destructiveGageRr({
+          batches: rows.map((row) => row[batchColumn.id]?.trim() || null),
+          operators: rows.map((row) => row[operatorColumn.id]?.trim() || null),
+          specimenIds: rows.map((row) => row[specimenColumn!.id]?.trim() || null),
+          measurements,
+          tolerance: request.tolerance,
+        })
+        gageRr = result.analysis
+      } else {
+        gageRr = await statsWorker.crossedGageRr({
+          parts: rows.map((row) => row[batchColumn.id]?.trim() || null),
+          operators: rows.map((row) => row[operatorColumn.id]?.trim() || null),
+          measurements,
+          tolerance: request.tolerance,
+        })
+      }
       setSession({
-        title: 'Gage R&R (crossed)',
-        columnName: `${measurementColumn.name} · ${partColumn.name} · ${operatorColumn.name}`,
-        gageRr: result,
+        title: request.kind === 'destructive' ? 'Gage R&R (destructive)' : 'Gage R&R (crossed)',
+        columnName: `${measurementColumn.name} · ${batchColumn.name} · ${operatorColumn.name}`,
+        gageRr,
+        gageRrDesign: request.kind,
         createdAt: new Date(),
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Gage R&R kunde inte beräknas.')
+    }
+  }
+
+  async function runGageStudy(request: GageStudyRequest) {
+    try {
+      if (request.kind === 'type1') {
+        const measurementColumn = columns.find(
+          (column) => column.id === request.measurementColumnId,
+        )
+        if (!measurementColumn || measurementColumn.type !== 'numeric') {
+          throw new Error('Välj en numerisk mätkolumn.')
+        }
+        const measurements = rows.map((row) => {
+          const raw = row[measurementColumn.id]?.trim()
+          return raw ? Number(raw.replace(',', '.')) : null
+        })
+        const result = await statsWorker.type1GageStudy({
+          measurements,
+          referenceValue: request.referenceValue,
+          tolerance: request.tolerance,
+          alpha: request.alpha,
+        })
+        setSession({
+          title: language === 'sv' ? 'Type 1 Gage Study' : 'Type 1 Gage Study',
+          columnName: measurementColumn.name,
+          type1Gage: result,
+          createdAt: new Date(),
+        })
+      } else if (request.kind === 'linearity') {
+        const referenceColumn = columns.find((column) => column.id === request.referenceColumnId)
+        const measurementColumn = columns.find(
+          (column) => column.id === request.measurementColumnId,
+        )
+        if (
+          !referenceColumn ||
+          !measurementColumn ||
+          referenceColumn.type !== 'numeric' ||
+          measurementColumn.type !== 'numeric' ||
+          referenceColumn.id === measurementColumn.id
+        ) {
+          throw new Error('Välj två olika numeriska referens- och mätkolumner.')
+        }
+        const readColumn = (columnId: string) =>
+          rows.map((row) => {
+            const raw = row[columnId]?.trim()
+            return raw ? Number(raw.replace(',', '.')) : null
+          })
+        const result = await statsWorker.gageLinearityAndBias({
+          referenceValues: readColumn(referenceColumn.id),
+          measurements: readColumn(measurementColumn.id),
+          alpha: request.alpha,
+        })
+        setSession({
+          title: language === 'sv' ? 'Bias / Linearity' : 'Bias / Linearity',
+          columnName: `${measurementColumn.name} · ${referenceColumn.name}`,
+          gageLinearity: result,
+          createdAt: new Date(),
+        })
+      } else if (request.kind === 'runChart') {
+        const partColumn = columns.find((column) => column.id === request.partColumnId)
+        const operatorColumn = columns.find((column) => column.id === request.operatorColumnId)
+        const measurementColumn = columns.find(
+          (column) => column.id === request.measurementColumnId,
+        )
+        if (
+          !partColumn ||
+          !operatorColumn ||
+          !measurementColumn ||
+          partColumn.type === 'numeric' ||
+          operatorColumn.type === 'numeric' ||
+          measurementColumn.type !== 'numeric'
+        ) {
+          throw new Error('Välj textkolumner för del/operatör och numeriskt mätvärde.')
+        }
+        const result = await statsWorker.gageRunChart({
+          parts: rows.map((row) => row[partColumn.id]?.trim() || null),
+          operators: rows.map((row) => row[operatorColumn.id]?.trim() || null),
+          measurements: rows.map((row) => {
+            const raw = row[measurementColumn.id]?.trim()
+            return raw ? Number(raw.replace(',', '.')) : null
+          }),
+        })
+        const graph: GraphModel = {
+          stableKey: result,
+          kind: 'timeSeries',
+          title: 'Gage Run Chart',
+          xTitle: language === 'sv' ? 'Del · replikat' : 'Part · replicate',
+          yTitle: measurementColumn.name,
+          sampleCount: result.measurementCount,
+          cumulativeAxis: false,
+          data: result.operators.map((series) => ({
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: series.operator,
+            x: series.points.map((point) => `${point.part} · ${point.replicate}`),
+            y: series.points.map((point) => point.measurement),
+          })),
+        }
+        setSession({
+          title: language === 'sv' ? 'Gage Run Chart' : 'Gage Run Chart',
+          columnName: `${measurementColumn.name} · ${partColumn.name} · ${operatorColumn.name}`,
+          gageRunChart: result,
+          graph,
+          createdAt: new Date(),
+        })
+      } else {
+        const partColumn = columns.find((column) => column.id === request.partColumnId)
+        const operatorColumn = columns.find((column) => column.id === request.operatorColumnId)
+        const measurementColumn = columns.find(
+          (column) => column.id === request.measurementColumnId,
+        )
+        if (
+          !partColumn ||
+          !operatorColumn ||
+          !measurementColumn ||
+          partColumn.type === 'numeric' ||
+          operatorColumn.type === 'numeric' ||
+          measurementColumn.type !== 'numeric'
+        ) {
+          throw new Error('Välj nestade textkolumner för del/operatör och numeriskt mätvärde.')
+        }
+        const result = await statsWorker.nestedGageRr({
+          parts: rows.map((row) => row[partColumn.id]?.trim() || null),
+          operators: rows.map((row) => row[operatorColumn.id]?.trim() || null),
+          measurements: rows.map((row) => {
+            const raw = row[measurementColumn.id]?.trim()
+            return raw ? Number(raw.replace(',', '.')) : null
+          }),
+          tolerance: request.tolerance,
+        })
+        setSession({
+          title: language === 'sv' ? 'Nested Gage R&R' : 'Nested Gage R&R',
+          columnName: `${measurementColumn.name} · ${partColumn.name} · ${operatorColumn.name}`,
+          nestedGageRr: result,
+          createdAt: new Date(),
+        })
+      }
+    } catch (error) {
+      setToast(
+        error instanceof Error
+          ? error.message
+          : language === 'sv'
+            ? 'Gage-studien kunde inte beräknas.'
+            : 'The gage study could not be calculated.',
+      )
+    }
+  }
+
+  async function runAttributeAgreement(request: AttributeAgreementRequest) {
+    try {
+      const itemColumn = columns.find((column) => column.id === request.itemColumnId)
+      const referenceColumn = request.referenceColumnId
+        ? columns.find((column) => column.id === request.referenceColumnId)
+        : undefined
+      const raterColumns = request.raterColumnIds.map((id) =>
+        columns.find((column) => column.id === id),
+      )
+      if (
+        !itemColumn ||
+        raterColumns.length < 2 ||
+        raterColumns.some((column) => !column) ||
+        request.raterColumnIds.includes(request.itemColumnId) ||
+        (referenceColumn && request.raterColumnIds.includes(referenceColumn.id))
+      ) {
+        throw new Error('Välj item-ID, minst två bedömare och en separat valfri standardkolumn.')
+      }
+      const result = await statsWorker.analyzeAttributeAgreement({
+        items: rows.map((row) => row[itemColumn.id] ?? null),
+        reference: referenceColumn ? rows.map((row) => row[referenceColumn.id] ?? null) : undefined,
+        raters: raterColumns.map((column) => ({
+          name: column!.name,
+          ratings: rows.map((row) => row[column!.id] ?? null),
+        })),
+        weighting: request.weighting === 'none' ? undefined : request.weighting,
+        categoryOrder: request.weighting === 'none' ? undefined : request.categoryOrder,
+      })
+      setSession({
+        title: language === 'sv' ? 'Attributöverensstämmelse' : 'Attribute Agreement Analysis',
+        columnName: `${itemColumn.name} · ${raterColumns.map((column) => column!.name).join(' · ')}`,
+        attributeAgreement: result,
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(
+        error instanceof Error
+          ? error.message
+          : language === 'sv'
+            ? 'Attributöverensstämmelsen kunde inte beräknas.'
+            : 'Attribute agreement could not be calculated.',
+      )
     }
   }
 
@@ -1328,6 +2238,109 @@ function App() {
       })
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Subgroupdiagrammet kunde inte beräknas.')
+    }
+  }
+
+  async function runAdvancedControlChart(request: AdvancedControlChartRequest) {
+    const readNumeric = (columnId: string) => {
+      const column = columns.find((item) => item.id === columnId)
+      if (!column || column.type !== 'numeric') return null
+      return rows.map((row) => {
+        const raw = row[column.id]?.trim()
+        return raw ? Number(raw.replace(',', '.')) : null
+      })
+    }
+
+    try {
+      let advancedControlChart: AdvancedControlChartResult
+      let columnName: string
+      if (request.kind === 'attribute') {
+        const counts = readNumeric(request.countColumnId)
+        if (!counts) throw new Error('Välj en numerisk defektkolumn.')
+        let result
+        if (request.chartKind === 'c') {
+          result = await statsWorker.attributeControlChart(
+            'c',
+            counts.map((value) => value ?? Number.NaN),
+          )
+          columnName = columns.find((column) => column.id === request.countColumnId)?.name ?? ''
+        } else if (request.chartKind === 'np') {
+          result = await statsWorker.attributeControlChart(
+            'np',
+            counts.map((value) => value ?? Number.NaN),
+            Array.from({ length: rows.length }, () => request.constantSampleSize ?? Number.NaN),
+          )
+          columnName = columns.find((column) => column.id === request.countColumnId)?.name ?? ''
+        } else {
+          const sizeColumnId = request.sizeColumnId
+          const sizes = sizeColumnId ? readNumeric(sizeColumnId) : null
+          if (!sizes || !sizeColumnId) throw new Error('Välj kolumn för stickprovsstorlek/enheter.')
+          result = await statsWorker.attributeControlChart(
+            request.chartKind,
+            counts.map((value) => value ?? Number.NaN),
+            sizes.map((value) => value ?? Number.NaN),
+          )
+          columnName = `${columns.find((column) => column.id === request.countColumnId)?.name ?? ''} · ${columns.find((column) => column.id === sizeColumnId)?.name ?? ''}`
+        }
+        advancedControlChart = { kind: 'attribute', result }
+      } else {
+        const values = readNumeric(request.columnId)
+        if (!values) throw new Error('Välj en numerisk mätkolumn.')
+        if (request.kind === 'cusum') {
+          advancedControlChart = {
+            kind: 'cusum',
+            result: await statsWorker.cusumControlChart(
+              values,
+              request.target,
+              request.sigma,
+              request.referenceValue,
+              request.decisionInterval,
+            ),
+          }
+        } else if (request.kind === 'ewma') {
+          advancedControlChart = {
+            kind: 'ewma',
+            result: await statsWorker.ewmaControlChart(
+              values,
+              request.target,
+              request.sigma,
+              request.lambda,
+              request.width,
+            ),
+          }
+        } else {
+          advancedControlChart = {
+            kind: 'zmr',
+            result: await statsWorker.zMrControlChart(values, request.target, request.sigma),
+          }
+        }
+        columnName = columns.find((column) => column.id === request.columnId)?.name ?? ''
+      }
+
+      const chartLabels: Record<AttributeControlChartKind, string> = {
+        p: 'P-diagram',
+        pPrime: 'P′-diagram (Laney)',
+        np: 'NP-diagram',
+        c: 'C-diagram',
+        u: 'U-diagram',
+        uPrime: 'U′-diagram (Laney)',
+      }
+      const title =
+        advancedControlChart.kind === 'attribute'
+          ? chartLabels[advancedControlChart.result.kind]
+          : advancedControlChart.kind.toUpperCase()
+      setSession({
+        title,
+        columnName,
+        advancedControlChart,
+        graph: advancedControlChartGraph(advancedControlChart, language),
+        ...(advancedControlChart.kind === 'zmr'
+          ? { additionalGraphs: [zMrMovingRangeGraph(advancedControlChart.result, language)] }
+          : {}),
+        createdAt: new Date(),
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Styrdiagrammet kunde inte beräknas.')
     }
   }
 
@@ -2109,9 +3122,14 @@ function App() {
     else if (action === 'processCapability') setProcessCapabilityDialogOpen(true)
     else if (action === 'imrControlChart') setImrControlChartDialogOpen(true)
     else if (action === 'chartBuilder') setGraphDialogOpen(true)
+    else if (action === 'dashboard') setDashboardOpen(true)
     else if (action === 'qualityStudio') setQualityStudioOpen(true)
+    else if (action === 'acceptanceSampling') setAcceptanceSamplingDialogOpen(true)
     else if (action === 'gageRr') setGageRrDialogOpen(true)
+    else if (action === 'gageStudy') setGageStudyDialogOpen(true)
     else if (action === 'subgroupControlChart') setSubgroupControlChartDialogOpen(true)
+    else if (action === 'advancedControlCharts') setAdvancedControlChartDialogOpen(true)
+    else if (action === 'attributeAgreement') setAttributeAgreementDialogOpen(true)
     else if (action === 'twoSampleT') setTwoSampleTDialogOpen(true)
     else if (action === 'pairedT') setPairedTDialogOpen(true)
     else if (action === 'oneProportion') setOneProportionDialogOpen(true)
@@ -2485,11 +3503,19 @@ function App() {
     }
     const bounds = button.getBoundingClientRect()
     const menuWidth = 224
+    const viewportPadding = 8
     const left =
-      bounds.left + menuWidth <= window.innerWidth - 8
+      bounds.left + menuWidth <= window.innerWidth - viewportPadding
         ? bounds.left
-        : Math.max(8, bounds.right - menuWidth)
-    setMenuPosition({ top: bounds.bottom, left })
+        : Math.max(viewportPadding, bounds.right - menuWidth)
+    const availableBelow = Math.max(0, window.innerHeight - bounds.bottom - viewportPadding)
+    const availableAbove = Math.max(0, bounds.top - viewportPadding)
+    const estimatedHeight = Math.min(menuContent[key].length * 36 + 16, window.innerHeight - 16)
+    const openBelow = availableBelow >= estimatedHeight || availableBelow >= availableAbove
+    const availableHeight = openBelow ? availableBelow : availableAbove
+    const maxHeight = Math.max(80, Math.min(estimatedHeight, availableHeight))
+    const top = openBelow ? bounds.bottom : Math.max(viewportPadding, bounds.top - maxHeight)
+    setMenuPosition({ top, left, maxHeight })
     setMenuOpen(key)
   }
 
@@ -2508,10 +3534,6 @@ function App() {
           {activeWorksheet ? worksheetName(activeWorksheet) : ''}
         </div>
         <div className="topbar-spacer" />
-        <div className="topbar-note">
-          <span className="live-dot" />
-          Autospar aktivt
-        </div>
         <button
           className="icon-button"
           type="button"
@@ -2566,7 +3588,11 @@ function App() {
           <div
             className="menu-popover"
             role="menu"
-            style={{ top: menuPosition.top, left: menuPosition.left }}
+            style={{
+              top: menuPosition.top,
+              left: menuPosition.left,
+              maxHeight: menuPosition.maxHeight,
+            }}
           >
             {menuContent[menuOpen].map((action) => (
               <button
@@ -2717,6 +3743,11 @@ function App() {
             <Activity size={14} />
             {language === 'sv' ? 'Grafer' : 'Graphs'}
             <span className="nav-count">{graphCount}</span>
+          </button>
+          <button className="nav-item" type="button" onClick={() => setDashboardOpen(true)}>
+            <LayoutDashboard size={14} />
+            Dashboard
+            <span className="nav-count">{dashboardBlocks.length}</span>
           </button>
           <div className="nav-bottom">
             {language === 'sv' ? 'Lokal arbetsbok' : 'Local workbook'}
@@ -3044,8 +4075,53 @@ function App() {
         <aside className="session-panel" id="session" aria-label={t('session')} tabIndex={-1}>
           <div className="session-title">
             <h2>{t('session')}</h2>
-            <span>{session ? '1 resultat' : 'redo'}</span>
+            <div className="session-title-actions">
+              <span>
+                {language === 'sv'
+                  ? `${sessionHistory.length} resultat`
+                  : `${sessionHistory.length} results`}
+              </span>
+              {sessionHistory.length > 0 && (
+                <button
+                  className="icon-button"
+                  type="button"
+                  title={language === 'sv' ? 'Rensa alla analyser' : 'Clear all analyses'}
+                  aria-label={language === 'sv' ? 'Rensa alla analyser' : 'Clear all analyses'}
+                  onClick={clearSessionHistory}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
           </div>
+          {sessionHistory.length > 0 && (
+            <nav
+              className="session-history-list"
+              aria-label={language === 'sv' ? 'Analysresultat' : 'Analysis history'}
+            >
+              {sessionHistory.map((entry) => (
+                <div className="session-history-row" key={entry.id}>
+                  <button
+                    className={`session-history-select${entry.id === activeSessionId ? ' active' : ''}`}
+                    type="button"
+                    aria-current={entry.id === activeSessionId ? 'true' : undefined}
+                    onClick={() => activateSession(entry)}
+                  >
+                    <span>{entry.result.title}</span>
+                    <small>{entry.result.columnName}</small>
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`${language === 'sv' ? 'Ta bort analys' : 'Remove analysis'}: ${entry.result.title}`}
+                    onClick={() => removeSession(entry.id)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </nav>
+          )}
           {session ? (
             <article className="session-entry">
               <div className="session-time">
@@ -5134,14 +6210,8 @@ function App() {
                       {session.imrControlChart.signals.map((signal) => (
                         <li key={`${signal.chart}-${signal.rule}-${signal.observations[0]}`}>
                           <strong>{signal.chart}</strong>{' '}
-                          {signal.rule === 'beyond-limit'
-                            ? language === 'sv'
-                              ? 'utanför styrgräns'
-                              : 'beyond control limit'
-                            : language === 'sv'
-                              ? 'åtta i rad på samma sida'
-                              : 'eight consecutive on one side'}
-                          : {signal.observations.join(', ')}
+                          {imrSignalDescription(signal.rule, language)}:{' '}
+                          {signal.observations.join(', ')}
                         </li>
                       ))}
                     </ul>
@@ -5153,9 +6223,13 @@ function App() {
                     </p>
                   )}
                   <p className="session-caption">
-                    {language === 'sv'
-                      ? 'Individgränser: medelvärde ± 3 × MR̄/1,128. MR-gräns: 3,267 × MR̄. Åtta-på-en-sida är en Western Electric/Nelson-liknande regel; inga andra regler har kontrollerats.'
-                      : 'Individuals limits: mean ± 3 × MR̄/1.128. MR limit: 3.267 × MR̄. Eight-on-one-side is a Western Electric/Nelson-style rule; other rules were not checked.'}
+                    {session.imrControlChart.ruleSet === 'basic'
+                      ? language === 'sv'
+                        ? 'Individgränser: medelvärde ± 3 × MR̄/1,128. MR-gräns: 3,267 × MR̄. Endast grundreglerna 3σ och åtta på samma sida har kontrollerats.'
+                        : 'Individuals limits: mean ± 3 × MR̄/1.128. MR limit: 3.267 × MR̄. Only the basic 3σ and eight-on-one-side rules were checked.'
+                      : language === 'sv'
+                        ? 'Individgränser: medelvärde ± 3 × MR̄/1,128. MR-gräns: 3,267 × MR̄. Nelson-regler 2–8 kontrollerades på individdiagrammet; saknade observationer bryter regel-fönster.'
+                        : 'Individuals limits: mean ± 3 × MR̄/1.128. MR limit: 3.267 × MR̄. Nelson rules 2–8 were checked on the individuals chart; missing observations break rule windows.'}
                   </p>
                 </section>
               )}
@@ -5353,6 +6427,7 @@ function App() {
                     }}
                     language={language}
                     theme={theme}
+                    onRendered={revealSessionGraph}
                   />
                   <p className="session-caption">
                     {language === 'sv'
@@ -5429,6 +6504,7 @@ function App() {
                     }}
                     language={language}
                     theme={theme}
+                    onRendered={revealSessionGraph}
                   />
                   <p className="session-caption">
                     {language === 'sv'
@@ -5723,6 +6799,7 @@ function App() {
                     }}
                     language={language}
                     theme={theme}
+                    onRendered={revealSessionGraph}
                   />
                   <p className="session-caption">
                     {language === 'sv'
@@ -5731,9 +6808,87 @@ function App() {
                   </p>
                 </section>
               )}
-              {session.graph && (
-                <GraphPlot graph={session.graph} language={language} theme={theme} />
+              {session.advancedControlChart && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv'
+                      ? 'Utökat styrdiagramresultat'
+                      : 'Advanced control chart result'
+                  }
+                >
+                  <h4>
+                    {session.advancedControlChart.kind === 'attribute'
+                      ? ({ p: 'P', pPrime: 'P′', np: 'NP', c: 'C', u: 'U', uPrime: 'U′' } as const)[
+                          session.advancedControlChart.result.kind
+                        ]
+                      : session.advancedControlChart.kind === 'zmr'
+                        ? 'Z-MR'
+                        : session.advancedControlChart.kind.toUpperCase()}{' '}
+                    {language === 'sv' ? 'styrdiagram' : 'control chart'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Subgrupper' : 'Subgroups'}</span>
+                      <strong>{session.advancedControlChart.result.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {language === 'sv' ? 'Signaler utanför gräns' : 'Signals beyond limits'}
+                      </span>
+                      <strong>{session.advancedControlChart.result.signals.length}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Centrum / mål' : 'Center / target'}</span>
+                      <strong>
+                        {formatValue(
+                          session.advancedControlChart.kind === 'attribute'
+                            ? session.advancedControlChart.result.centerLine
+                            : session.advancedControlChart.result.target,
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {session.advancedControlChart.kind === 'cusum'
+                      ? `Standardiserad tvåsidig CUSUM; k = ${formatValue(session.advancedControlChart.result.referenceValue)}, h = ${formatValue(session.advancedControlChart.result.decisionInterval)}, σ = ${formatValue(session.advancedControlChart.result.sigma)}. σ och mål är användarangivna.`
+                      : session.advancedControlChart.kind === 'ewma'
+                        ? `EWMA λ = ${formatValue(session.advancedControlChart.result.lambda)}, L = ${formatValue(session.advancedControlChart.result.width)}, σ = ${formatValue(session.advancedControlChart.result.sigma)}. Gränser varierar med tid; σ och mål är användarangivna.`
+                        : session.advancedControlChart.kind === 'zmr'
+                          ? language === 'sv'
+                            ? `Z-MR: z = (x − mål) / σ; Z-gränser är ±3, MR-Z UCL = 3,267 × MR̄z. Mål och σ anges av användaren.`
+                            : `Z-MR: z = (x − target) / σ; Z limits are ±3, MR-Z UCL = 3.267 × MR̄z. Target and σ are user-specified.`
+                          : session.advancedControlChart.result.kind === 'pPrime' ||
+                              session.advancedControlChart.result.kind === 'uPrime'
+                            ? `Laney-justering med σz = ${formatValue(session.advancedControlChart.result.dispersionMultiplier ?? 1)} (MR̄/1,128).`
+                            : session.advancedControlChart.result.kind === 'p' ||
+                                session.advancedControlChart.result.kind === 'u'
+                              ? language === 'sv'
+                                ? 'Subgruppsspecifika 3σ-gränser använder respektive nämnare.'
+                                : 'Subgroup-specific 3σ limits use each denominator.'
+                              : language === 'sv'
+                                ? '3σ-gränser; variationens tidsstabilitet och modellantaganden har inte testats.'
+                                : '3σ limits; process stability over time and model assumptions were not tested.'}
+                  </p>
+                </section>
               )}
+              {session.graph && (
+                <GraphPlot
+                  graph={session.graph}
+                  language={language}
+                  theme={theme}
+                  onRendered={revealSessionGraph}
+                />
+              )}
+              {session.additionalGraphs?.map((graph, index) => (
+                <GraphPlot
+                  graph={graph}
+                  language={language}
+                  theme={theme}
+                  onRendered={revealSessionGraph}
+                  key={`${graph.title}-${index}`}
+                />
+              ))}
               {session.subgroupControlChart && (
                 <section
                   className="t-test-result"
@@ -5817,15 +6972,513 @@ function App() {
                   </p>
                 </section>
               )}
+              {session.type1Gage && (
+                <section
+                  className="t-test-result"
+                  aria-label={language === 'sv' ? 'Type 1 Gage-resultat' : 'Type 1 Gage result'}
+                >
+                  <h4>Type 1 Gage Study</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>n</span>
+                      <strong>{session.type1Gage.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Referens' : 'Reference'}</span>
+                      <strong>{formatValue(session.type1Gage.referenceValue)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Medelvärde' : 'Mean'}</span>
+                      <strong>{formatValue(session.type1Gage.mean)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Repeterbarhet s' : 'Repeatability s'}</span>
+                      <strong>{formatValue(session.type1Gage.standardDeviation)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Bias' : 'Bias'}</span>
+                      <strong>{formatValue(session.type1Gage.bias)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>p (bias = 0)</span>
+                      <strong>{formatPValue(session.type1Gage.biasPValue, language)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Cg</span>
+                      <strong>{formatValue(session.type1Gage.cg)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Cgk</span>
+                      <strong>{formatValue(session.type1Gage.cgk)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>% tolerans (6s)</span>
+                      <strong>{formatValue(session.type1Gage.percentTolerance)}%</strong>
+                    </div>
+                  </div>
+                  <p className="session-caption">
+                    {100 * (1 - session.type1Gage.alpha)} % KI för bias: [
+                    {formatValue(session.type1Gage.biasConfidenceInterval[0])},{' '}
+                    {formatValue(session.type1Gage.biasConfidenceInterval[1])}]. Cg använder 20 %
+                    och Cgk 10 % av toleransen; gränsvärden beror på kundstandard och användning.
+                    Normalitet och stabilitet har inte testats.
+                  </p>
+                </section>
+              )}
+              {session.gageLinearity && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Bias/Linearity-resultat' : 'Bias/Linearity result'
+                  }
+                >
+                  <h4>Bias / Linearity</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Kompletta par' : 'Complete pairs'}</span>
+                      <strong>{session.gageLinearity.count}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Referensnivåer' : 'Reference levels'}</span>
+                      <strong>{session.gageLinearity.levelCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Medelbias' : 'Mean bias'}</span>
+                      <strong>{formatValue(session.gageLinearity.meanBias)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {language === 'sv' ? 'Bias vid referens 0' : 'Bias at reference 0'}
+                      </span>
+                      <strong>{formatValue(session.gageLinearity.intercept)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Lutning' : 'Slope'}</span>
+                      <strong>{formatValue(session.gageLinearity.slope)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>R²</span>
+                      <strong>{formatValue(session.gageLinearity.rSquared)}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Lutning p-värde' : 'Slope p-value'}</span>
+                      <strong>{formatPValue(session.gageLinearity.slopePValue, language)}</strong>
+                    </div>
+                  </div>
+                  <GraphPlot
+                    graph={{
+                      stableKey: session.gageLinearity,
+                      kind: 'scatter',
+                      title: language === 'sv' ? 'Bias mot referensnivå' : 'Bias versus reference',
+                      xTitle: language === 'sv' ? 'Referensnivå' : 'Reference level',
+                      yTitle:
+                        language === 'sv'
+                          ? 'Bias (mätning − referens)'
+                          : 'Bias (measurement − reference)',
+                      sampleCount: session.gageLinearity.count,
+                      cumulativeAxis: false,
+                      data: [
+                        {
+                          type: 'scatter',
+                          mode: 'markers',
+                          name: language === 'sv' ? 'Observerad bias' : 'Observed bias',
+                          x: session.gageLinearity.points.map((point) => point.reference),
+                          y: session.gageLinearity.points.map((point) => point.bias),
+                        },
+                        {
+                          type: 'scatter',
+                          mode: 'lines',
+                          name: language === 'sv' ? 'Anpassad linje' : 'Fitted line',
+                          x: [
+                            session.gageLinearity.minimumReference,
+                            session.gageLinearity.maximumReference,
+                          ],
+                          y: [
+                            session.gageLinearity.fittedBiasAtMinimum,
+                            session.gageLinearity.fittedBiasAtMaximum,
+                          ],
+                        },
+                        {
+                          type: 'scatter',
+                          mode: 'lines',
+                          name: language === 'sv' ? 'Nollbias' : 'Zero bias',
+                          x: [
+                            session.gageLinearity.minimumReference,
+                            session.gageLinearity.maximumReference,
+                          ],
+                          y: [0, 0],
+                          lineDash: 'dash',
+                          color: '#78837d',
+                        },
+                      ],
+                    }}
+                    language={language}
+                    theme={theme}
+                    onRendered={revealSessionGraph}
+                  />
+                  <p className="session-caption">
+                    {100 * (1 - session.gageLinearity.alpha)} % KI för lutning: [
+                    {formatValue(session.gageLinearity.slopeConfidenceInterval[0])},{' '}
+                    {formatValue(session.gageLinearity.slopeConfidenceInterval[1])}].
+                    Referensintervall: [{formatValue(session.gageLinearity.minimumReference)},{' '}
+                    {formatValue(session.gageLinearity.maximumReference)}]. Bias = mätning −
+                    referens. OLS-lutningen testar linjäritet; normalitet och stabilitet har inte
+                    testats.
+                  </p>
+                </section>
+              )}
+              {session.nestedGageRr && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Nested Gage R&R-resultat' : 'Nested Gage R&R result'
+                  }
+                >
+                  <h4>Nested Gage R&amp;R</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Operatörer' : 'Operators'}</span>
+                      <strong>{session.nestedGageRr.operatorCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Delar / operatör' : 'Parts / operator'}</span>
+                      <strong>{session.nestedGageRr.partsPerOperator}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Replikat / del' : 'Replicates / part'}</span>
+                      <strong>{session.nestedGageRr.replicatesPerPart}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        % Gage R&amp;R {language === 'sv' ? 'studievariation' : 'study variation'}
+                      </span>
+                      <strong>
+                        {formatValue(session.nestedGageRr.percentStudyVariation.gageRr)}%
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>% contribution</span>
+                      <strong>
+                        {formatValue(session.nestedGageRr.percentContribution.gageRr)}%
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>ndc</span>
+                      <strong>
+                        {session.nestedGageRr.numberOfDistinctCategories ===
+                        Number.POSITIVE_INFINITY
+                          ? '∞'
+                          : session.nestedGageRr.numberOfDistinctCategories}
+                      </strong>
+                    </div>
+                    {session.nestedGageRr.percentTolerance !== null && (
+                      <div className="stat-cell">
+                        <span>% tolerance</span>
+                        <strong>{formatValue(session.nestedGageRr.percentTolerance)}%</strong>
+                      </div>
+                    )}
+                  </div>
+                  <div className="quality-table-wrap">
+                    <table className="quality-table gage-table">
+                      <thead>
+                        <tr>
+                          <th>{language === 'sv' ? 'Källa' : 'Source'}</th>
+                          <th>DF</th>
+                          <th>SS</th>
+                          <th>MS</th>
+                          <th>F</th>
+                          <th>p</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.nestedGageRr.anova.map((row) => (
+                          <tr key={row.source}>
+                            <th scope="row">
+                              {row.source === 'operator'
+                                ? language === 'sv'
+                                  ? 'Operatör'
+                                  : 'Operator'
+                                : row.source === 'partWithinOperator'
+                                  ? language === 'sv'
+                                    ? 'Del (operatör)'
+                                    : 'Part (operator)'
+                                  : language === 'sv'
+                                    ? 'Repeterbarhet'
+                                    : 'Repeatability'}
+                            </th>
+                            <td>{row.degreesOfFreedom}</td>
+                            <td>{formatValue(row.sumSquares)}</td>
+                            <td>{formatValue(row.meanSquare)}</td>
+                            <td>{row.fStatistic === null ? '—' : formatValue(row.fStatistic)}</td>
+                            <td>
+                              {row.pValue === null ? '—' : formatPValue(row.pValue, language)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Delar är nestade inom operatör och kan inte separeras från operatör. Balanserad design antas; normalitet och oberoende har inte testats. Resultatet är inte oberoende referensverifierat.'
+                      : 'Parts are nested within operators and cannot be separated from operator. A balanced design is assumed; normality and independence were not tested. Results are not independently reference-verified.'}
+                  </p>
+                </section>
+              )}
+              {session.gageRunChart && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Gage Run Chart-resultat' : 'Gage Run Chart result'
+                  }
+                >
+                  <h4>Gage Run Chart</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Delar' : 'Parts'}</span>
+                      <strong>{session.gageRunChart.partCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Operatörer' : 'Operators'}</span>
+                      <strong>{session.gageRunChart.operatorCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Replikat / cell' : 'Replicates / cell'}</span>
+                      <strong>{session.gageRunChart.replicatesPerCell}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Mätningar' : 'Measurements'}</span>
+                      <strong>{session.gageRunChart.measurementCount}</strong>
+                    </div>
+                  </div>
+                </section>
+              )}
+              {session.attributeAgreement && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Attributöverensstämmelse' : 'Attribute agreement'
+                  }
+                >
+                  <h4>
+                    {language === 'sv'
+                      ? 'Attributöverensstämmelse'
+                      : 'Attribute Agreement Analysis'}
+                  </h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Items' : 'Items'}</span>
+                      <strong>{session.attributeAgreement.itemCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Försök / rader' : 'Trials / rows'}</span>
+                      <strong>{session.attributeAgreement.trialCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Kompletta bedömningar' : 'Complete rows'}</span>
+                      <strong>{session.attributeAgreement.completeRows}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {language === 'sv'
+                          ? 'Total parvis överensstämmelse'
+                          : 'Overall pairwise agreement'}
+                      </span>
+                      <strong>
+                        {session.attributeAgreement.overallAgreementPercent === null
+                          ? '—'
+                          : `${formatValue(session.attributeAgreement.overallAgreementPercent)}%`}
+                      </strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>Fleiss kappa</span>
+                      <strong>
+                        {session.attributeAgreement.fleissKappa === null
+                          ? '—'
+                          : formatValue(session.attributeAgreement.fleissKappa)}
+                      </strong>
+                    </div>
+                    {session.attributeAgreement.referenceAgreementPercent !== null && (
+                      <div className="stat-cell">
+                        <span>{language === 'sv' ? 'Mot standard' : 'Against standard'}</span>
+                        <strong>
+                          {formatValue(session.attributeAgreement.referenceAgreementPercent)}%
+                        </strong>
+                      </div>
+                    )}
+                    {session.attributeAgreement.raterResults.some(
+                      (rater) => rater.referenceWeightedKappa !== null,
+                    ) && (
+                      <div className="stat-cell">
+                        <span>
+                          {language === 'sv' ? 'Viktad κ mot standard' : 'Weighted κ vs standard'}
+                        </span>
+                        <strong>
+                          {formatValue(
+                            session.attributeAgreement.raterResults.reduce(
+                              (sum, rater) => sum + (rater.referenceWeightedKappa ?? 0),
+                              0,
+                            ) /
+                              session.attributeAgreement.raterResults.filter(
+                                (rater) => rater.referenceWeightedKappa !== null,
+                              ).length,
+                          )}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                  <h5 className="quality-table-title">
+                    {language === 'sv' ? 'Bedömare' : 'Appraisers'}
+                  </h5>
+                  <div className="quality-table-wrap">
+                    <table className="quality-table gage-table">
+                      <thead>
+                        <tr>
+                          <th>{language === 'sv' ? 'Bedömare' : 'Appraiser'}</th>
+                          <th>{language === 'sv' ? 'Repeterbarhet' : 'Repeatability'}</th>
+                          <th>{language === 'sv' ? 'Mot standard' : 'Against standard'}</th>
+                          {session.attributeAgreement.weighting !== 'none' && (
+                            <th>
+                              {language === 'sv'
+                                ? 'Viktad κ mot standard'
+                                : 'Weighted κ vs standard'}
+                            </th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.attributeAgreement.raterResults.map((rater) => (
+                          <tr key={rater.name}>
+                            <th scope="row">{rater.name}</th>
+                            <td>
+                              {rater.repeatabilityPercent === null
+                                ? '—'
+                                : `${formatValue(rater.repeatabilityPercent)}%`}
+                            </td>
+                            <td>
+                              {rater.referenceAgreementPercent === null
+                                ? '—'
+                                : `${formatValue(rater.referenceAgreementPercent)}%`}
+                            </td>
+                            {session.attributeAgreement.weighting !== 'none' && (
+                              <td>
+                                {rater.referenceWeightedKappa === null
+                                  ? '—'
+                                  : formatValue(rater.referenceWeightedKappa)}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <h5 className="quality-table-title">
+                    {language === 'sv' ? 'Par mellan bedömare' : 'Between-appraiser pairs'}
+                  </h5>
+                  <div className="quality-table-wrap">
+                    <table className="quality-table gage-table">
+                      <thead>
+                        <tr>
+                          <th>{language === 'sv' ? 'Bedömarpar' : 'Appraiser pair'}</th>
+                          <th>{language === 'sv' ? 'Överensstämmelse' : 'Agreement'}</th>
+                          <th>Cohen kappa</th>
+                          {session.attributeAgreement.weighting !== 'none' && (
+                            <th>
+                              {language === 'sv' ? 'Viktad kappa' : 'Weighted kappa'} (
+                              {session.attributeAgreement.weighting})
+                            </th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.attributeAgreement.pairResults.map((pair) => (
+                          <tr key={`${pair.rater1}-${pair.rater2}`}>
+                            <th scope="row">
+                              {pair.rater1} · {pair.rater2}
+                            </th>
+                            <td>
+                              {pair.agreementPercent === null
+                                ? '—'
+                                : `${formatValue(pair.agreementPercent)}%`}
+                            </td>
+                            <td>{pair.kappa === null ? '—' : formatValue(pair.kappa)}</td>
+                            {session.attributeAgreement.weighting !== 'none' && (
+                              <td>
+                                {pair.weightedKappa === null
+                                  ? '—'
+                                  : formatValue(pair.weightedKappa)}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {session.attributeAgreement.referenceCategoryResults.length > 0 && (
+                    <>
+                      <h5 className="quality-table-title">
+                        {language === 'sv'
+                          ? 'Överensstämmelse per standardkategori'
+                          : 'Agreement by reference category'}
+                      </h5>
+                      <div className="quality-table-wrap">
+                        <table className="quality-table gage-table">
+                          <thead>
+                            <tr>
+                              <th>
+                                {language === 'sv' ? 'Standardkategori' : 'Reference category'}
+                              </th>
+                              <th>{language === 'sv' ? 'Jämförelser' : 'Comparisons'}</th>
+                              <th>{language === 'sv' ? 'Korrekta' : 'Correct'}</th>
+                              <th>{language === 'sv' ? 'Överensstämmelse' : 'Agreement'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {session.attributeAgreement.referenceCategoryResults.map((row) => (
+                              <tr key={row.category}>
+                                <th scope="row">{row.category}</th>
+                                <td>{row.comparisonCount}</td>
+                                <td>{row.correctCount}</td>
+                                <td>
+                                  {row.agreementPercent === null
+                                    ? '—'
+                                    : `${formatValue(row.agreementPercent)}%`}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Rader paras i aktuell ordning inom varje item-ID. Kappa kräver kategorivariation; upprepade försök behövs för repeterbarhet. Detta kompletterar, men ersätter inte, en full MSA-design och standarder kan kräva andra mått.'
+                      : 'Rows are paired in current order within each item ID. Kappa requires category variation; repeated trials are needed for repeatability. This supplements but does not replace a full MSA design, and standards may require other metrics.'}
+                  </p>
+                </section>
+              )}
               {session.gageRr && (
                 <section
                   className="t-test-result"
                   aria-label={language === 'sv' ? 'Gage R&R-resultat' : 'Gage R&R result'}
                 >
-                  <h4>Gage R&amp;R (crossed ANOVA)</h4>
+                  <h4>
+                    {session.gageRrDesign === 'destructive'
+                      ? 'Gage R&R (destructive ANOVA)'
+                      : 'Gage R&R (crossed ANOVA)'}
+                  </h4>
                   <div className="stat-grid t-test-grid">
                     <div className="stat-cell">
-                      <span>{language === 'sv' ? 'Delar' : 'Parts'}</span>
+                      <span>
+                        {session.gageRrDesign === 'destructive'
+                          ? language === 'sv'
+                            ? 'Batcher'
+                            : 'Batches'
+                          : language === 'sv'
+                            ? 'Delar'
+                            : 'Parts'}
+                      </span>
                       <strong>{session.gageRr.partCount}</strong>
                     </div>
                     <div className="stat-cell">
@@ -5833,7 +7486,15 @@ function App() {
                       <strong>{session.gageRr.operatorCount}</strong>
                     </div>
                     <div className="stat-cell">
-                      <span>{language === 'sv' ? 'Replikat/cell' : 'Replicates/cell'}</span>
+                      <span>
+                        {session.gageRrDesign === 'destructive'
+                          ? language === 'sv'
+                            ? 'Prov/cell'
+                            : 'Specimens/cell'
+                          : language === 'sv'
+                            ? 'Replikat/cell'
+                            : 'Replicates/cell'}
+                      </span>
                       <strong>{session.gageRr.replicatesPerCell}</strong>
                     </div>
                     <div className="stat-cell">
@@ -5883,7 +7544,9 @@ function App() {
                       <tbody>
                         {session.gageRr.anova.map((row) => (
                           <tr key={row.source}>
-                            <th scope="row">{gageAnovaLabel(row.source, isSwedish)}</th>
+                            <th scope="row">
+                              {gageAnovaLabel(row.source, isSwedish, session.gageRrDesign)}
+                            </th>
                             <td>{row.degreesOfFreedom}</td>
                             <td>{formatValue(row.sumSquares)}</td>
                             <td>{formatValue(row.meanSquare)}</td>
@@ -5940,7 +7603,9 @@ function App() {
                           ] as const
                         ).map(([component, variance, contribution, studyVariation]) => (
                           <tr key={component}>
-                            <th scope="row">{gageComponentLabel(component, isSwedish)}</th>
+                            <th scope="row">
+                              {gageComponentLabel(component, isSwedish, session.gageRrDesign)}
+                            </th>
                             <td>{formatValue(variance)}</td>
                             <td>{formatValue(contribution)}%</td>
                             <td>{formatValue(studyVariation)}%</td>
@@ -5950,9 +7615,85 @@ function App() {
                     </table>
                   </div>
                   <p className="session-caption">
-                    {isSwedish
-                      ? 'Crossed, balanserad slumpmodell med interaktion kvar i modellen; negativa skattade varianskomponenter sätts till 0. Normalitet, oberoende och stabilitet har inte testats. Tolkningströsklar är vägledande och kontextberoende.'
-                      : 'Crossed, balanced random-effects model with interaction retained; negative variance component estimates are set to 0. Normality, independence, and stability were not tested. Interpretation thresholds are guidance and context-dependent.'}
+                    {session.gageRrDesign === 'destructive'
+                      ? isSwedish
+                        ? 'Destruktiv design: varje fysisk provdel mäts en gång. Inom-cell-residualen innehåller både provvariation och mätfel och kan inte tolkas som ren repeterbarhet. Negativa komponenter sätts till 0; modellantaganden är inte testade.'
+                        : 'Destructive design: each physical specimen is measured once. The within-cell residual contains both specimen variation and measurement error and cannot be interpreted as pure repeatability. Negative components are set to 0; model assumptions were not tested.'
+                      : isSwedish
+                        ? 'Crossed, balanserad slumpmodell med interaktion kvar i modellen; negativa skattade varianskomponenter sätts till 0. Normalitet, oberoende och stabilitet har inte testats. Tolkningströsklar är vägledande och kontextberoende.'
+                        : 'Crossed, balanced random-effects model with interaction retained; negative variance component estimates are set to 0. Normality, independence, and stability were not tested. Interpretation thresholds are guidance and context-dependent.'}
+                  </p>
+                </section>
+              )}
+              {session.expandedGageRr && (
+                <section
+                  className="t-test-result"
+                  aria-label={
+                    language === 'sv' ? 'Expanded Gage R&R-resultat' : 'Expanded Gage R&R result'
+                  }
+                >
+                  <h4>Gage R&amp;R (expanded)</h4>
+                  <div className="stat-grid t-test-grid">
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Delar' : 'Parts'}</span>
+                      <strong>{session.expandedGageRr.partCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Operatörer' : 'Operators'}</span>
+                      <strong>{session.expandedGageRr.operatorCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>
+                        {language === 'sv' ? 'Extra faktornivåer' : 'Additional factor levels'}
+                      </span>
+                      <strong>{session.expandedGageRr.conditionCount}</strong>
+                    </div>
+                    <div className="stat-cell">
+                      <span>{language === 'sv' ? 'Replikat/cell' : 'Replicates/cell'}</span>
+                      <strong>{session.expandedGageRr.replicatesPerCell}</strong>
+                    </div>
+                    {session.expandedGageRr.percentTolerance !== null && (
+                      <div className="stat-cell">
+                        <span>% {language === 'sv' ? 'tolerans' : 'tolerance'}</span>
+                        <strong>{formatValue(session.expandedGageRr.percentTolerance)}%</strong>
+                      </div>
+                    )}
+                  </div>
+                  <div className="quality-table-wrap">
+                    <table className="quality-table gage-table">
+                      <thead>
+                        <tr>
+                          <th>{language === 'sv' ? 'ANOVA-källa' : 'ANOVA source'}</th>
+                          <th>DF</th>
+                          <th>SS</th>
+                          <th>MS</th>
+                          <th>{language === 'sv' ? 'Varianskomponent' : 'Variance component'}</th>
+                          <th>% contribution</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {session.expandedGageRr.anova.map((row) => (
+                          <tr key={row.source}>
+                            <th scope="row">{row.source}</th>
+                            <td>{row.degreesOfFreedom}</td>
+                            <td>{formatValue(row.sumSquares)}</td>
+                            <td>{formatValue(row.meanSquare)}</td>
+                            <td>
+                              {formatValue(session.expandedGageRr!.varianceComponents[row.source])}
+                            </td>
+                            <td>
+                              {formatValue(session.expandedGageRr!.percentContribution[row.source])}
+                              %
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="session-caption">
+                    {language === 'sv'
+                      ? 'Balanserad tre-faktors slumpmodell med alla interaktioner. Varianskomponenter klipps vid 0. Extra faktornivån och interaktionerna ingår i mätvariationen; oberoende referensverifiering återstår.'
+                      : 'Balanced three-factor random-effects model with all interactions. Variance components are truncated at 0. The additional factor and interactions are included in measurement variation; independent reference validation remains outstanding.'}
                   </p>
                 </section>
               )}
@@ -6271,8 +8012,8 @@ function App() {
           columns={numericColumns}
           language={language}
           onOpenChange={setImrControlChartDialogOpen}
-          onSubmit={(columnId) => {
-            void runImrControlChartAnalysis(columnId)
+          onSubmit={(columnId, ruleSet) => {
+            void runImrControlChartAnalysis(columnId, ruleSet)
           }}
         />
         <GraphDialog
@@ -6286,22 +8027,45 @@ function App() {
             void runGraphAnalysis(selection)
           }}
         />
+        <DashboardDialog
+          open={dashboardOpen}
+          graphs={dashboardGraphSources}
+          blocks={dashboardBlocks}
+          language={language}
+          theme={theme}
+          onBlocksChange={setDashboardBlocks}
+          onOpenChange={setDashboardOpen}
+        />
         <QualityStudioDialog
           open={qualityStudioOpen}
           language={language}
+          theme={theme}
           onOpenChange={setQualityStudioOpen}
+        />
+        <AcceptanceSamplingDialog
+          open={acceptanceSamplingDialogOpen}
+          language={language}
+          theme={theme}
+          onOpenChange={setAcceptanceSamplingDialogOpen}
         />
         <GageRrDialog
           open={gageRrDialogOpen}
           initialPartColumn={categoryColumns[0]?.id ?? ''}
           initialOperatorColumn={categoryColumns[1]?.id ?? categoryColumns[0]?.id ?? ''}
+          initialSpecimenColumn={categoryColumns[2]?.id ?? ''}
           numericColumns={numericColumns}
           categoryColumns={categoryColumns}
           language={language}
           onOpenChange={setGageRrDialogOpen}
-          onSubmit={(partColumnId, operatorColumnId, measurementColumnId, tolerance) => {
-            void runGageRrAnalysis(partColumnId, operatorColumnId, measurementColumnId, tolerance)
-          }}
+          onSubmit={(request) => void runGageRrAnalysis(request)}
+        />
+        <GageStudyDialog
+          open={gageStudyDialogOpen}
+          numericColumns={numericColumns}
+          categoryColumns={categoryColumns}
+          language={language}
+          onOpenChange={setGageStudyDialogOpen}
+          onSubmit={(request) => void runGageStudy(request)}
         />
         <SubgroupControlChartDialog
           open={subgroupControlChartDialogOpen}
@@ -6314,6 +8078,21 @@ function App() {
           onSubmit={(kind, groupColumnId, measurementColumnId) => {
             void runSubgroupControlChartAnalysis(kind, groupColumnId, measurementColumnId)
           }}
+        />
+        <AdvancedControlChartDialog
+          open={advancedControlChartDialogOpen}
+          columns={numericColumns}
+          initialColumn={targetColumn}
+          language={language}
+          onOpenChange={setAdvancedControlChartDialogOpen}
+          onSubmit={(request) => void runAdvancedControlChart(request)}
+        />
+        <AttributeAgreementDialog
+          open={attributeAgreementDialogOpen}
+          columns={columns}
+          language={language}
+          onOpenChange={setAttributeAgreementDialogOpen}
+          onSubmit={(request) => void runAttributeAgreement(request)}
         />
         <ChiSquareGoodnessOfFitDialog
           open={chiSquareGoodnessOfFitDialogOpen}
