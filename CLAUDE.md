@@ -1,6 +1,6 @@
-# StatLab
+# MoreAnalys
 
-StatLab is an independent, Swedish-first statistical analysis application built with React 18, strict TypeScript, and Vite. Its goal is a spreadsheet-centered workflow with transparent statistical output. It is not affiliated with or a copy of any commercial statistics product.
+MoreAnalys is an independent, Swedish-first statistical analysis application built with React 18, strict TypeScript, and Vite. Its goal is a spreadsheet-centered workflow with transparent statistical output. It is not affiliated with or a copy of any commercial statistics product.
 
 ## Conventions
 

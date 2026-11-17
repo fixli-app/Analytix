@@ -1,4 +1,4 @@
-# StatLab progress
+# MoreAnalys progress
 
 Status values: **ej påbörjad**, **klar**, **klar och verifierad**. A feature may only be marked verified after its focused tests pass and, for statistical analyses, its result matches a reference fixture with a stated tolerance. All items start as not started; work in progress is described separately at the end.
 
@@ -98,7 +98,7 @@ Denna roadmap är en intern arbetslista, inte en fullständig inventering av Min
 
 ## Aktuell session
 
-- Startläge: fortsättning på befintlig StatLab-grund.
+- Startläge: fortsättning på befintlig MoreAnalys-grund.
 - Delvis levererat: virtuellt redigerbart datablad med flera arbetsblad, projekt-/autosparsstöd, import/export, session och testade analysdelmängder. Oberoende statistisk referensverifiering återstår.
 - Senaste kontroller: `npm run format:check`, `npm run typecheck`, `npm run lint`, `npm test` (42 filer, 184 tester) och `npm run build` passerar efter power-/tidsserie-/survival-/regression-/DOE-/ANOVA-utökningarna; Plotly ger fortfarande en varning om stor chunk.
 - Webbläsarkontroll: flödesschemaeditor verifierade med start/processnoder, kopplingspil, etikett/färg/arrow-style, multi-board create/switch/delete, v1-migrering, autospar och JSON-export; även 390 px utan horisontell överströmning. Power: N-sökning, powerläge, tvåproportionstest och kurvgraf; tidsserie trend/ACF-PACF; Kaplan–Meier/log-rank och censurerade exponential-/Weibull-fits verifierades. Arbetsbok och boards återställdes efter prover.

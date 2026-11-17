@@ -1,6 +1,6 @@
 # Designbeslut
 
-- **Produktidentitet:** StatLab är ett arbetsnamn för en fristående app. Inga externa produktvarumärken, logotyper, ikoner eller texter återanvänds.
+- **Produktidentitet:** MoreAnalys är namnet på en fristående app. Inga externa produktvarumärken, logotyper, ikoner eller texter återanvänds.
 - **Startpunkt:** Arbetsytan var tom. Vite + React + TypeScript väljs för den efterfrågade klientappen.
 - **Omfattning:** Den önskade funktionsmängden motsvarar ett stort statistiskt skrivbordsprogram och kan inte sanningsenligt levereras eller verifieras i en enda arbetsinsats. Arbetet ska därför vara inkrementellt, i angiven fasordning, med fungerande vertikala delar och en ärlig status i `PROGRESS.md`.
 - **Verifieringspolicy:** Inga statistiska resultat märks verifierade utan reproducerbara tester mot referensvärden, dokumenterad tolerans och tydlig hantering av indatafel.

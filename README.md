@@ -1,6 +1,6 @@
-# StatLab
+# MoreAnalys
 
-StatLab is a Swedish-first, local statistical workbench. It is an independent project and does not reproduce another product's branding or interface assets.
+MoreAnalys is a Swedish-first, local statistical workbench. It is an independent project and does not reproduce another product's branding or interface assets.
 
 ## Run locally
 

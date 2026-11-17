@@ -3160,7 +3160,7 @@ function App() {
       fields: columns.map((column) => column.name),
       data: rows.map((row) => columns.map((column) => row[column.id] ?? '')),
     })
-    downloadFile(csv, 'statlab-data.csv', 'text/csv;charset=utf-8')
+    downloadFile(csv, 'moreanalys-data.csv', 'text/csv;charset=utf-8')
   }
 
   function exportLinearRegressionDiagnostics() {
@@ -3229,7 +3229,7 @@ function App() {
 
   function saveProject() {
     const data = { ...workbookDocument(useWorkbookStore.getState()), name: projectName }
-    const fileName = projectName.trim().replace(/[\\/:*?"<>|]+/g, '-') || 'statlab'
+    const fileName = projectName.trim().replace(/[\\/:*?"<>|]+/g, '-') || 'moreanalys'
     downloadFile(JSON.stringify(data, null, 2), `${fileName}.statlab`, 'application/json')
   }
 
@@ -3522,10 +3522,10 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#arbetsblad" aria-label="StatLab startsida">
-          <span className="brand-mark">s</span>
+        <a className="brand" href="#arbetsblad" aria-label="MoreAnalys startsida">
+          <span className="brand-mark">M</span>
           <span className="brand-name">
-            stat<span>lab</span>
+            More<span>Analys</span>
           </span>
         </a>
         <div className="project-name">
@@ -7737,7 +7737,7 @@ function App() {
                 session &&
                 downloadFile(
                   `${session.title} · ${session.columnName}\n${JSON.stringify(session.summary, null, 2)}\nEj verifierad analys.`,
-                  'statlab-session.txt',
+                  'moreanalys-session.txt',
                   'text/plain',
                 )
               }
@@ -8275,8 +8275,8 @@ function App() {
                   : 'Settings'
                 : appDialog === 'about'
                   ? language === 'sv'
-                    ? 'Om StatLab'
-                    : 'About StatLab'
+                    ? 'Om MoreAnalys'
+                    : 'About MoreAnalys'
                   : language === 'sv'
                     ? 'Analysstatus'
                     : 'Analysis status'}
@@ -8288,8 +8288,8 @@ function App() {
                   : 'Choose the workspace language and appearance.'
                 : appDialog === 'about'
                   ? language === 'sv'
-                    ? 'StatLab är en fristående statistisk arbetsbok.'
-                    : 'StatLab is an independent statistical workbook.'
+                    ? 'MoreAnalys är en fristående statistisk arbetsbok.'
+                    : 'MoreAnalys is an independent statistical workbook.'
                   : language === 'sv'
                     ? 'Översikt över verktyg och verifieringsstatus.'
                     : 'Overview of available tools and verification status.'}
@@ -8347,8 +8347,8 @@ function App() {
             ) : appDialog === 'about' ? (
               <p className="app-dialog-copy">
                 {language === 'sv'
-                  ? 'StatLab erbjuder ett virtuellt arbetsblad och lokala verktyg för statistik, diagram och kvalitetsanalys. Resultat markeras som ej verifierade tills de jämförts med dokumenterade referensvärden.'
-                  : 'StatLab provides a virtual worksheet and local tools for statistics, graphs, and quality analysis. Results remain unverified until compared with documented reference values.'}
+                  ? 'MoreAnalys erbjuder ett virtuellt arbetsblad och lokala verktyg för statistik, diagram och kvalitetsanalys. Resultat markeras som ej verifierade tills de jämförts med dokumenterade referensvärden.'
+                  : 'MoreAnalys provides a virtual worksheet and local tools for statistics, graphs, and quality analysis. Results remain unverified until compared with documented reference values.'}
               </p>
             ) : (
               <div className="app-dialog-copy">
